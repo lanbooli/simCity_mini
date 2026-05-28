@@ -52,6 +52,7 @@ CREATE TABLE IF NOT EXISTS npc (
     appearance      TEXT NOT NULL DEFAULT '{}',
     clothing        TEXT NOT NULL DEFAULT '{}',
     voice_type      TEXT NOT NULL DEFAULT '',
+    career          TEXT,
     personality     TEXT NOT NULL DEFAULT '[]',
     current_scene_id TEXT,
     home_scene_id   TEXT,

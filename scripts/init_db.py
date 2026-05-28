@@ -70,11 +70,11 @@ def seed_data(conn):
         attrs = jd(_npc_attrs.get(t["id"], {"stamina": 5, "speed": 5, "strength": 5}))
         home_id = _npc_homes.get(t["id"])
         execute(c, """INSERT OR REPLACE INTO npc(id, name, birth_date, gender, appearance, clothing,
-                      voice_type, personality, current_scene_id, home_scene_id, current_mood, current_activity, schedule, attributes)
-                      VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                      voice_type, career, personality, current_scene_id, home_scene_id, current_mood, current_activity, schedule, attributes)
+                      VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (t["id"], t["name"], t["birth_date"], t["gender"],
                  jd(t["appearance"]), jd(t["clothing"]), t["voice_type"],
-                 jd(t["personality"]), t["default_scene"], home_id,
+                 t.get("career", ""), jd(t["personality"]), t["default_scene"], home_id,
                  "neutral", t["default_activity"],
                  jd(t.get("schedule", {})), attrs))
         npc_ids.append(t["id"])

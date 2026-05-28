@@ -4,54 +4,159 @@
     "name": "李明",
     "birth_date": "1998-03-15",
     "gender": "male",
-    "appearance": {"height": "178cm", "build": "瘦高", "hair": "黑色短发", "eyes": "棕色", "face": "清秀温和"},
-    "clothing": {"default": "白色衬衫配黑色围裙", "casual": "灰色卫衣和牛仔裤"},
+    "appearance": {
+      "height": "178cm",
+      "build": "瘦高",
+      "hair": "黑色短发",
+      "eyes": "棕色",
+      "face": "清秀温和"
+    },
+    "clothing": {
+      "default": "白色衬衫配黑色围裙",
+      "casual": "灰色卫衣和牛仔裤"
+    },
     "voice_type": "温和青年男声",
-    "personality": ["温和", "细心", "有点内向", "乐于助人"],
+    "personality": [
+      "温和",
+      "细心",
+      "有点内向",
+      "乐于助人"
+    ],
     "default_scene": "scene_coffee_shop",
     "scene_role": "worker",
     "default_activity": "擦拭咖啡机",
     "goals": [
-      {"goal_type": "work", "description": "成为咖啡店店长", "is_short_term": false, "priority": 3},
-      {"goal_type": "life", "description": "攒钱买一辆二手车", "is_short_term": true, "priority": 5},
-      {"goal_type": "relationship", "description": "多交几个好朋友", "is_short_term": true, "priority": 4}
+      {
+        "goal_type": "work",
+        "description": "成为咖啡店店长",
+        "is_short_term": false,
+        "priority": 3
+      },
+      {
+        "goal_type": "life",
+        "description": "攒钱买一辆二手车",
+        "is_short_term": true,
+        "priority": 5
+      },
+      {
+        "goal_type": "relationship",
+        "description": "多交几个好朋友",
+        "is_short_term": true,
+        "priority": 4
+      }
     ],
     "schedule": {
-      "6:00": {"activity": "起床晨跑", "scene": "scene_park"},
-      "8:00": {"activity": "开店准备", "scene": "scene_coffee_shop"},
-      "9:00": {"activity": "接待顾客", "scene": "scene_coffee_shop"},
-      "12:00": {"activity": "午休吃饭", "scene": "scene_park"},
-      "13:00": {"activity": "接待顾客", "scene": "scene_coffee_shop"},
-      "17:00": {"activity": "下班收拾", "scene": "scene_coffee_shop"},
-      "18:00": {"activity": "去超市购物", "scene": "scene_market"},
-      "20:00": {"activity": "在家休息", "scene": "scene_coffee_shop"}
-    }
+      "6:00": {
+        "activity": "起床晨跑",
+        "scene": "scene_park"
+      },
+      "8:00": {
+        "activity": "开店准备",
+        "scene": "scene_coffee_shop"
+      },
+      "9:00": {
+        "activity": "接待顾客",
+        "scene": "scene_coffee_shop"
+      },
+      "12:00": {
+        "activity": "午休吃饭",
+        "scene": "scene_park"
+      },
+      "13:00": {
+        "activity": "接待顾客",
+        "scene": "scene_coffee_shop"
+      },
+      "17:00": {
+        "activity": "下班收拾",
+        "scene": "scene_coffee_shop"
+      },
+      "18:00": {
+        "activity": "去超市购物",
+        "scene": "scene_market"
+      },
+      "20:00": {
+        "activity": "在家休息",
+        "scene": "scene_coffee_shop"
+      }
+    },
+    "career": "咖啡店主"
   },
   {
     "id": "npc_wang_fang",
     "name": "王芳",
     "birth_date": "2000-07-22",
     "gender": "female",
-    "appearance": {"height": "162cm", "build": "娇小可爱", "hair": "棕色长发带蝴蝶结", "eyes": "大眼黑瞳", "face": "圆圆的脸蛋"},
-    "clothing": {"default": "粉色连衣裙", "casual": "白色T恤和牛仔短裙"},
+    "appearance": {
+      "height": "162cm",
+      "build": "娇小可爱",
+      "hair": "棕色长发带蝴蝶结",
+      "eyes": "大眼黑瞳",
+      "face": "圆圆的脸蛋"
+    },
+    "clothing": {
+      "default": "粉色连衣裙",
+      "casual": "白色T恤和牛仔短裙"
+    },
     "voice_type": "年轻女孩可爱型",
-    "personality": ["活泼", "开朗", "话多", "有点八卦", "热心肠"],
+    "personality": [
+      "活泼",
+      "开朗",
+      "话多",
+      "有点八卦",
+      "热心肠"
+    ],
     "default_scene": "scene_coffee_shop",
     "scene_role": "visitor",
     "default_activity": "喝咖啡看手机",
     "goals": [
-      {"goal_type": "work", "description": "考上理想大学", "is_short_term": true, "priority": 2},
-      {"goal_type": "relationship", "description": "和李明成为好朋友", "is_short_term": true, "priority": 3},
-      {"goal_type": "life", "description": "学会弹吉他", "is_short_term": true, "priority": 5}
+      {
+        "goal_type": "work",
+        "description": "考上理想大学",
+        "is_short_term": true,
+        "priority": 2
+      },
+      {
+        "goal_type": "relationship",
+        "description": "和李明成为好朋友",
+        "is_short_term": true,
+        "priority": 3
+      },
+      {
+        "goal_type": "life",
+        "description": "学会弹吉他",
+        "is_short_term": true,
+        "priority": 5
+      }
     ],
     "schedule": {
-      "7:00": {"activity": "起床准备", "scene": "scene_school"},
-      "8:00": {"activity": "上课", "scene": "scene_school"},
-      "12:00": {"activity": "午休和朋友聊天", "scene": "scene_school"},
-      "15:00": {"activity": "放学后去咖啡店", "scene": "scene_coffee_shop"},
-      "17:00": {"activity": "去公园散步", "scene": "scene_park"},
-      "19:00": {"activity": "在图书馆学习", "scene": "scene_library"},
-      "21:00": {"activity": "回家休息", "scene": "scene_school"}
+      "7:00": {
+        "activity": "起床准备",
+        "scene": "scene_school"
+      },
+      "8:00": {
+        "activity": "上课",
+        "scene": "scene_school"
+      },
+      "12:00": {
+        "activity": "午休和朋友聊天",
+        "scene": "scene_school"
+      },
+      "15:00": {
+        "activity": "放学后去咖啡店",
+        "scene": "scene_coffee_shop"
+      },
+      "17:00": {
+        "activity": "去公园散步",
+        "scene": "scene_park"
+      },
+      "19:00": {
+        "activity": "在图书馆学习",
+        "scene": "scene_library"
+      },
+      "21:00": {
+        "activity": "回家休息",
+        "scene": "scene_school"
+      }
     }
   },
   {
@@ -59,25 +164,73 @@
     "name": "张伟",
     "birth_date": "1995-11-08",
     "gender": "male",
-    "appearance": {"height": "182cm", "build": "健壮", "hair": "黑色寸头", "eyes": "深邃黑瞳", "face": "棱角分明"},
-    "clothing": {"default": "运动T恤和短裤", "casual": "休闲夹克和长裤"},
+    "appearance": {
+      "height": "182cm",
+      "build": "健壮",
+      "hair": "黑色寸头",
+      "eyes": "深邃黑瞳",
+      "face": "棱角分明"
+    },
+    "clothing": {
+      "default": "运动T恤和短裤",
+      "casual": "休闲夹克和长裤"
+    },
     "voice_type": "低沉成熟男声",
-    "personality": ["自信", "直爽", "运动型", "保护欲强", "有点粗心"],
+    "personality": [
+      "自信",
+      "直爽",
+      "运动型",
+      "保护欲强",
+      "有点粗心"
+    ],
     "default_scene": "scene_park",
     "scene_role": "visitor",
     "default_activity": "在公园跑步锻炼",
     "goals": [
-      {"goal_type": "work", "description": "通过健身教练资格证考试", "is_short_term": true, "priority": 2},
-      {"goal_type": "life", "description": "参加城市马拉松比赛", "is_short_term": true, "priority": 3},
-      {"goal_type": "relationship", "description": "找到合适的女朋友", "is_short_term": false, "priority": 4}
+      {
+        "goal_type": "work",
+        "description": "通过健身教练资格证考试",
+        "is_short_term": true,
+        "priority": 2
+      },
+      {
+        "goal_type": "life",
+        "description": "参加城市马拉松比赛",
+        "is_short_term": true,
+        "priority": 3
+      },
+      {
+        "goal_type": "relationship",
+        "description": "找到合适的女朋友",
+        "is_short_term": false,
+        "priority": 4
+      }
     ],
     "schedule": {
-      "6:00": {"activity": "晨跑锻炼", "scene": "scene_park"},
-      "8:00": {"activity": "去健身房工作", "scene": "scene_park"},
-      "12:00": {"activity": "午餐休息", "scene": "scene_coffee_shop"},
-      "14:00": {"activity": "在公园指导学员", "scene": "scene_park"},
-      "17:00": {"activity": "超市买菜", "scene": "scene_market"},
-      "19:00": {"activity": "晚间散步", "scene": "scene_park"}
+      "6:00": {
+        "activity": "晨跑锻炼",
+        "scene": "scene_park"
+      },
+      "8:00": {
+        "activity": "去健身房工作",
+        "scene": "scene_park"
+      },
+      "12:00": {
+        "activity": "午餐休息",
+        "scene": "scene_coffee_shop"
+      },
+      "14:00": {
+        "activity": "在公园指导学员",
+        "scene": "scene_park"
+      },
+      "17:00": {
+        "activity": "超市买菜",
+        "scene": "scene_market"
+      },
+      "19:00": {
+        "activity": "晚间散步",
+        "scene": "scene_park"
+      }
     }
   },
   {
@@ -85,52 +238,153 @@
     "name": "陈雪",
     "birth_date": "1999-12-03",
     "gender": "female",
-    "appearance": {"height": "165cm", "build": "苗条优雅", "hair": "黑色长直发", "eyes": "温柔杏眼", "face": "古典瓜子脸"},
-    "clothing": {"default": "素色长裙配围巾", "casual": "针织开衫和长裤"},
+    "appearance": {
+      "height": "165cm",
+      "build": "苗条优雅",
+      "hair": "黑色长直发",
+      "eyes": "温柔杏眼",
+      "face": "古典瓜子脸"
+    },
+    "clothing": {
+      "default": "素色长裙配围巾",
+      "casual": "针织开衫和长裤"
+    },
     "voice_type": "温柔知性女声",
-    "personality": ["温柔", "安静", "喜欢阅读", "有点忧郁", "细腻敏感"],
+    "personality": [
+      "温柔",
+      "安静",
+      "喜欢阅读",
+      "有点忧郁",
+      "细腻敏感"
+    ],
     "default_scene": "scene_library",
     "scene_role": "worker",
     "default_activity": "整理书架上的书籍",
     "goals": [
-      {"goal_type": "work", "description": "考取图书管理员资格证", "is_short_term": true, "priority": 3},
-      {"goal_type": "life", "description": "写完自己的第一本小说", "is_short_term": false, "priority": 2},
-      {"goal_type": "relationship", "description": "交一个可以倾诉的朋友", "is_short_term": true, "priority": 4}
+      {
+        "goal_type": "work",
+        "description": "考取图书管理员资格证",
+        "is_short_term": true,
+        "priority": 3
+      },
+      {
+        "goal_type": "life",
+        "description": "写完自己的第一本小说",
+        "is_short_term": false,
+        "priority": 2
+      },
+      {
+        "goal_type": "relationship",
+        "description": "交一个可以倾诉的朋友",
+        "is_short_term": true,
+        "priority": 4
+      }
     ],
     "schedule": {
-      "7:00": {"activity": "在公园晨读", "scene": "scene_park"},
-      "9:00": {"activity": "开馆整理", "scene": "scene_library"},
-      "10:00": {"activity": "帮助读者找书", "scene": "scene_library"},
-      "12:00": {"activity": "午休喝咖啡", "scene": "scene_coffee_shop"},
-      "13:00": {"activity": "管理借阅", "scene": "scene_library"},
-      "17:00": {"activity": "闭馆整理", "scene": "scene_library"},
-      "18:00": {"activity": "公园散步放松", "scene": "scene_park"}
-    }
+      "7:00": {
+        "activity": "在公园晨读",
+        "scene": "scene_park"
+      },
+      "9:00": {
+        "activity": "开馆整理",
+        "scene": "scene_library"
+      },
+      "10:00": {
+        "activity": "帮助读者找书",
+        "scene": "scene_library"
+      },
+      "12:00": {
+        "activity": "午休喝咖啡",
+        "scene": "scene_coffee_shop"
+      },
+      "13:00": {
+        "activity": "管理借阅",
+        "scene": "scene_library"
+      },
+      "17:00": {
+        "activity": "闭馆整理",
+        "scene": "scene_library"
+      },
+      "18:00": {
+        "activity": "公园散步放松",
+        "scene": "scene_park"
+      }
+    },
+    "career": "图书管理员"
   },
   {
     "id": "npc_liu_jie",
     "name": "刘姐",
     "birth_date": "1985-05-20",
     "gender": "female",
-    "appearance": {"height": "160cm", "build": "微胖亲切", "hair": "卷曲短发", "eyes": "笑眯眯的眯眼", "face": "圆润慈祥"},
-    "clothing": {"default": "花围裙配红色上衣", "casual": "宽松连衣裙"},
+    "appearance": {
+      "height": "160cm",
+      "build": "微胖亲切",
+      "hair": "卷曲短发",
+      "eyes": "笑眯眯的眯眼",
+      "face": "圆润慈祥"
+    },
+    "clothing": {
+      "default": "花围裙配红色上衣",
+      "casual": "宽松连衣裙"
+    },
     "voice_type": "热情中年女声",
-    "personality": ["热情", "爱唠叨", "关心邻里", "八卦达人", "热心肠"],
+    "personality": [
+      "热情",
+      "爱唠叨",
+      "关心邻里",
+      "八卦达人",
+      "热心肠"
+    ],
     "default_scene": "scene_market",
     "scene_role": "worker",
     "default_activity": "整理货架上的商品",
     "goals": [
-      {"goal_type": "work", "description": "把超市生意做得更好", "is_short_term": false, "priority": 2},
-      {"goal_type": "life", "description": "给儿子找一个好姑娘", "is_short_term": true, "priority": 1},
-      {"goal_type": "relationship", "description": "撮合李明和王芳", "is_short_term": true, "priority": 3}
+      {
+        "goal_type": "work",
+        "description": "把超市生意做得更好",
+        "is_short_term": false,
+        "priority": 2
+      },
+      {
+        "goal_type": "life",
+        "description": "给儿子找一个好姑娘",
+        "is_short_term": true,
+        "priority": 1
+      },
+      {
+        "goal_type": "relationship",
+        "description": "撮合李明和王芳",
+        "is_short_term": true,
+        "priority": 3
+      }
     ],
     "schedule": {
-      "6:00": {"activity": "开店准备进货", "scene": "scene_market"},
-      "8:00": {"activity": "开门营业", "scene": "scene_market"},
-      "12:00": {"activity": "午休去公园", "scene": "scene_park"},
-      "14:00": {"activity": "整理货架", "scene": "scene_market"},
-      "17:00": {"activity": "去咖啡店串门", "scene": "scene_coffee_shop"},
-      "19:00": {"activity": "关门收工", "scene": "scene_market"}
-    }
+      "6:00": {
+        "activity": "开店准备进货",
+        "scene": "scene_market"
+      },
+      "8:00": {
+        "activity": "开门营业",
+        "scene": "scene_market"
+      },
+      "12:00": {
+        "activity": "午休去公园",
+        "scene": "scene_park"
+      },
+      "14:00": {
+        "activity": "整理货架",
+        "scene": "scene_market"
+      },
+      "17:00": {
+        "activity": "去咖啡店串门",
+        "scene": "scene_coffee_shop"
+      },
+      "19:00": {
+        "activity": "关门收工",
+        "scene": "scene_market"
+      }
+    },
+    "career": "超市店主"
   }
 ]

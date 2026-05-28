@@ -309,12 +309,21 @@ class NpcProcess:
         if "greet" in self._action_cooldowns and self._action_cooldowns["greet"] > 0:
             return
 
-        # Check relationship — only greet if not hostile
+        # Check relationship
         rel = self.relationship_mgr.get_relation(player_id)
         if rel and rel["favorability"] < 0:
+            return  # Hostile — no greeting
+
+        # Determine if NPC is at their workplace
+        career = self.npc_data.get("career", "")
+        at_workplace = bool(career and current_scene and CAREER_WORKPLACE.get(career) == current_scene)
+
+        # Not at workplace: only greet if player is acquaintance+
+        fav = rel["favorability"] if rel else 0
+        if not at_workplace and fav < 15:
             return
 
-        logger.info(f"NPC {self.npc_data['name']}: player {player_name} entered my scene, greeting immediately")
+        logger.info(f"NPC {self.npc_data['name']}: player {player_name} entered my scene{' (workplace)' if at_workplace else ''}, greeting")
         # Execute greeting directly (same as _execute_player_greeting but without perception lookup)
         self._action_cooldowns["greet"] = 60
 
@@ -329,9 +338,6 @@ class NpcProcess:
             conn.close()
 
         try:
-            career = self.npc_data.get("career", "")
-            at_workplace = bool(career and current_scene and CAREER_WORKPLACE.get(career) == current_scene)
-
             if at_workplace and career in CAREER_GREETINGS:
                 templates = CAREER_GREETINGS[career]
                 greeting_text = random.choice(templates)
