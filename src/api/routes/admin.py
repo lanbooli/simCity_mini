@@ -1,0 +1,443 @@
+"""
+Admin panel API routes — only available in DEBUG mode.
+Provides endpoints for modifying NPCs, relationships, game state, and triggering test events.
+"""
+
+import json
+import os
+from datetime import datetime, timezone
+from pathlib import Path
+
+from fastapi import APIRouter, HTTPException
+from config.settings import settings
+from src.common.database import get_connection, fetch_one, fetch_all, execute
+from src.common.models import gen_id
+from src.common.utils import clamp
+
+router = APIRouter(prefix="/api/admin", tags=["admin"])
+
+ADMIN_CMD_CHANNEL = "admin:process:cmd"
+PROCESS_STATUS_FILE = Path(__file__).parent.parent.parent.parent / "data" / "processes.json"
+
+ADMIN_ENABLED = settings.admin_enabled or os.environ.get("DEBUG", "").lower() in ("1", "true", "yes")
+
+
+def _require_admin():
+    if not ADMIN_ENABLED:
+        raise HTTPException(404, "Not found")
+
+
+# ── NPC operations ──────────────────────────────────
+
+@router.get("/npcs")
+def list_all_npcs():
+    """List all NPCs with full details for admin panel."""
+    _require_admin()
+    conn = get_connection()
+    try:
+        rows = fetch_all(conn,
+            "SELECT id, name, gender, personality, current_scene_id, "
+            "current_mood, current_activity, attributes, is_active, appearance "
+            "FROM npc ORDER BY name")
+        result = []
+        for r in rows:
+            d = dict(r)
+            d["personality"] = json.loads(d.get("personality", "[]"))
+            d["attributes"] = json.loads(d.get("attributes", "{}"))
+            d["appearance"] = json.loads(d.get("appearance", "{}"))
+            result.append(d)
+        return {"status": "ok", "data": result}
+    finally:
+        conn.close()
+
+
+@router.get("/npcs/{npc_id}")
+def get_npc_admin(npc_id: str):
+    """Get full NPC data including attributes for admin editing."""
+    _require_admin()
+    conn = get_connection()
+    try:
+        row = fetch_one(conn,
+            "SELECT * FROM npc WHERE id = ?", (npc_id,))
+        if not row:
+            raise HTTPException(404, "NPC not found")
+        d = dict(row)
+        for field in ("appearance", "clothing", "personality", "schedule", "attributes"):
+            try:
+                d[field] = json.loads(d.get(field, "{}") if field != "personality" else d.get(field, "[]"))
+            except (json.JSONDecodeError, TypeError):
+                pass
+        return {"status": "ok", "data": d}
+    finally:
+        conn.close()
+
+
+@router.post("/npcs/{npc_id}")
+async def update_npc(npc_id: str, request: dict):
+    """Update NPC attributes, mood, scene, activity, personality, or active status."""
+    _require_admin()
+    conn = get_connection()
+    try:
+        existing = fetch_one(conn, "SELECT * FROM npc WHERE id = ?", (npc_id,))
+        if not existing:
+            raise HTTPException(404, "NPC not found")
+
+        updates = {}
+        # Attributes (stamina/speed/strength)
+        if "attributes" in request:
+            attrs = request["attributes"]
+            updates["attributes"] = json.dumps({
+                "stamina": clamp(attrs.get("stamina", 5), 1, 10),
+                "speed": clamp(attrs.get("speed", 5), 1, 10),
+                "strength": clamp(attrs.get("strength", 5), 1, 10),
+            })
+
+        # Mood
+        if "current_mood" in request:
+            mood = request["current_mood"]
+            if mood in ("happy", "neutral", "sad", "angry", "excited", "bored", "fear", "traumatized"):
+                updates["current_mood"] = mood
+
+        # Scene / location
+        if "current_scene_id" in request:
+            scene_id = request["current_scene_id"]
+            updates["current_scene_id"] = scene_id
+            # Also update scene_npc table
+            execute(conn,
+                "INSERT OR REPLACE INTO scene_npc(scene_id, npc_id, role) VALUES(?, ?, 'visitor')",
+                (scene_id, npc_id))
+
+        # Activity
+        if "current_activity" in request:
+            updates["current_activity"] = request["current_activity"]
+
+        # Personality tags
+        if "personality" in request:
+            updates["personality"] = json.dumps(request["personality"], ensure_ascii=False)
+
+        # Active status
+        if "is_active" in request:
+            updates["is_active"] = 1 if request["is_active"] else 0
+
+        if updates:
+            set_clause = ", ".join(f"{k} = ?" for k in updates)
+            values = list(updates.values()) + [npc_id]
+            execute(conn, f"UPDATE npc SET {set_clause}, updated_at = datetime('now') WHERE id = ?", tuple(values))
+            conn.commit()
+
+        return {"status": "ok", "data": {"npc_id": npc_id, "updated": list(updates.keys())}}
+    finally:
+        conn.close()
+
+
+# ── Relationship operations ─────────────────────────
+
+@router.get("/relationships")
+def list_all_relationships():
+    """List all relationships for admin browsing."""
+    _require_admin()
+    conn = get_connection()
+    try:
+        rows = fetch_all(conn, """
+            SELECT r.*,
+                   COALESCE(n.name, p.name) as entity_a_name,
+                   COALESCE(n2.name, p2.name) as entity_b_name
+            FROM relationship r
+            LEFT JOIN npc n ON r.entity_a_id = n.id AND r.entity_a_type = 'npc'
+            LEFT JOIN player p ON r.entity_a_id = p.id AND r.entity_a_type = 'player'
+            LEFT JOIN npc n2 ON r.entity_b_id = n2.id AND r.entity_b_type = 'npc'
+            LEFT JOIN player p2 ON r.entity_b_id = p2.id AND r.entity_b_type = 'player'
+            ORDER BY r.entity_a_id, r.entity_b_id
+        """)
+        return {"status": "ok", "data": [dict(r) for r in rows]}
+    finally:
+        conn.close()
+
+
+@router.post("/relationships")
+def set_relationship(request: dict):
+    """
+    Set or update a relationship between any two entities.
+    Body: {entity_a_id, entity_a_type, entity_b_id, entity_b_type, ...fields}
+
+    Convenience presets: use "preset" key instead of individual fields:
+      "stranger" → fav=0, fam=0, comfort=0, type=stranger
+      "friend"   → fav=50, fam=30, comfort=30, type=friend
+      "lover"    → fav=85, fam=60, comfort=85, type=boyfriend/girlfriend, love_eligible=1
+      "spouse"   → fav=95, fam=90, comfort=100, type=spouse, love_eligible=1
+      "enemy"    → fav=-80, fam=5, comfort=0, type=enemy
+    """
+    _require_admin()
+    conn = get_connection()
+    try:
+        entity_a_id = request["entity_a_id"]
+        entity_a_type = request["entity_a_type"]
+        entity_b_id = request["entity_b_id"]
+        entity_b_type = request["entity_b_type"]
+
+        presets = {
+            "stranger": {"relationship_type": "stranger", "favorability": 0, "familiarity": 0, "intimacy_comfort": 0, "love_eligible": 0, "jealousy_level": 0},
+            "friend": {"relationship_type": "friend", "favorability": 50, "familiarity": 30, "intimacy_comfort": 30, "love_eligible": 0, "jealousy_level": 0},
+            "lover": {"relationship_type": "boyfriend" if request.get("target_gender") == "female" else "girlfriend", "favorability": 85, "familiarity": 60, "intimacy_comfort": 85, "love_eligible": 1, "jealousy_level": 0, "committed_since": "Day 1 · 08:00"},
+            "spouse": {"relationship_type": "spouse", "favorability": 95, "familiarity": 90, "intimacy_comfort": 100, "love_eligible": 1, "jealousy_level": 0, "committed_since": "Day 1 · 08:00", "married_since": "Day 1 · 08:00"},
+            "enemy": {"relationship_type": "enemy", "favorability": -80, "familiarity": 5, "intimacy_comfort": 0, "love_eligible": 0, "jealousy_level": 50},
+        }
+
+        if "preset" in request:
+            preset_name = request["preset"]
+            if preset_name not in presets:
+                raise HTTPException(400, f"Unknown preset: {preset_name}. Available: {list(presets.keys())}")
+            values = presets[preset_name]
+        else:
+            values = {}
+            for field in ("relationship_type", "favorability", "familiarity", "intimacy_comfort",
+                         "jealousy_level", "love_eligible", "interaction_count",
+                         "committed_since", "married_since", "breakup_count", "divorced", "violation_count"):
+                if field in request:
+                    values[field] = request[field]
+
+        # Check if relationship exists
+        existing = fetch_one(conn,
+            "SELECT id FROM relationship WHERE entity_a_id = ? AND entity_a_type = ? AND entity_b_id = ? AND entity_b_type = ?",
+            (entity_a_id, entity_a_type, entity_b_id, entity_b_type))
+
+        if existing:
+            set_clause = ", ".join(f"{k} = ?" for k in values)
+            sql_params = list(values.values()) + [existing["id"]]
+            execute(conn, f"UPDATE relationship SET {set_clause}, updated_at = datetime('now') WHERE id = ?", tuple(sql_params))
+        else:
+            rel_id = gen_id()
+            fields = ["id", "entity_a_id", "entity_a_type", "entity_b_id", "entity_b_type"] + list(values.keys())
+            placeholders = ", ".join("?" * len(fields))
+            field_values = [rel_id, entity_a_id, entity_a_type, entity_b_id, entity_b_type] + list(values.values())
+            execute(conn, f"INSERT INTO relationship ({', '.join(fields)}) VALUES ({placeholders})", tuple(field_values))
+
+        conn.commit()
+        return {"status": "ok", "data": {"updated": True, "values": values}}
+    finally:
+        conn.close()
+
+
+# ── Game state operations ───────────────────────────
+
+@router.get("/game-state")
+def get_game_state():
+    """Get current game state snapshot."""
+    _require_admin()
+    conn = get_connection()
+    try:
+        rows = fetch_all(conn, "SELECT key, value FROM game_state")
+        state = {}
+        for r in rows:
+            try:
+                state[r["key"]] = json.loads(r["value"])
+            except (json.JSONDecodeError, TypeError):
+                state[r["key"]] = r["value"]
+
+        # Add counts
+        state["_counts"] = {
+            "npc": conn.execute("SELECT COUNT(*) as c FROM npc").fetchone()["c"],
+            "scene": conn.execute("SELECT COUNT(*) as c FROM scene").fetchone()["c"],
+            "relationship": conn.execute("SELECT COUNT(*) as c FROM relationship").fetchone()["c"],
+            "dialogue": conn.execute("SELECT COUNT(*) as c FROM dialogue").fetchone()["c"],
+            "memory": conn.execute("SELECT COUNT(*) as c FROM memory").fetchone()["c"],
+        }
+        return {"status": "ok", "data": state}
+    finally:
+        conn.close()
+
+
+@router.post("/game-state")
+def set_game_state(request: dict):
+    """Modify game state: time, weather, season, etc."""
+    _require_admin()
+    conn = get_connection()
+    try:
+        if "game_time" in request:
+            gt = request["game_time"]
+            execute(conn, "INSERT OR REPLACE INTO game_state(key, value) VALUES(?, ?)",
+                    ("game_time", json.dumps({"day": gt.get("day", 1), "hour": gt.get("hour", 8), "minute": gt.get("minute", 0)})))
+
+        if "weather" in request:
+            execute(conn, "INSERT OR REPLACE INTO game_state(key, value) VALUES(?, ?)",
+                    ("weather", json.dumps({"type": request["weather"]})))
+
+        conn.commit()
+        return {"status": "ok", "data": {"updated": list(request.keys())}}
+    finally:
+        conn.close()
+
+
+# ── Trigger operations (quick test) ─────────────────
+
+@router.post("/trigger")
+def trigger_event(request: dict):
+    """
+    Trigger a test event. Supported types:
+    - npc_decide: Force NPC to run a decision cycle
+    - npc_social: Force two NPCs to socialize
+    - npc_confess: Force NPC to confess to player
+    - npc_propose: Force NPC to propose to player
+    - jealousy: Simulate NPC witnessing player intimacy with another
+    - boundary_violation: Simulate boundary violation
+    - reset_cooldowns: Clear all action cooldowns for an NPC
+    - time_skip: Skip game time forward
+    """
+    _require_admin()
+    event_type = request.get("type", "")
+    data = request.get("data", {})
+
+    # These triggers are published to Redis for NPC/System processes to consume
+    # The admin route just publishes the event; actual processing happens in the target process
+    result = {"type": event_type, "dispatched": True, "note": "Event published. Processing depends on target process running."}
+
+    # Note: actual Redis publishing requires the broker instance.
+    # We store the trigger in game_state for processes to pick up.
+    conn = get_connection()
+    try:
+        trigger_data = {
+            "type": event_type,
+            "data": data,
+            "triggered_at": "now",
+        }
+        execute(conn, "INSERT OR REPLACE INTO game_state(key, value) VALUES(?, ?)",
+                ("admin_trigger", json.dumps(trigger_data)))
+        conn.commit()
+    finally:
+        conn.close()
+
+    return {"status": "ok", "data": result}
+
+
+@router.post("/reset-all")
+def reset_all_memories_and_dialogues():
+    """Reset all NPC memories, dialogues, and relationships. Keeps NPCs and player intact."""
+    _require_admin()
+    conn = get_connection()
+    try:
+        # Clear dialogue table
+        dialogue_count = conn.execute("SELECT COUNT(*) as c FROM dialogue").fetchone()["c"]
+        execute(conn, "DELETE FROM dialogue")
+
+        # Clear memory embeddings first (FK to memory)
+        emb_count = conn.execute("SELECT COUNT(*) as c FROM memory_embedding").fetchone()["c"]
+        execute(conn, "DELETE FROM memory_embedding")
+
+        # Clear memory table
+        memory_count = conn.execute("SELECT COUNT(*) as c FROM memory").fetchone()["c"]
+        execute(conn, "DELETE FROM memory")
+
+        # Reset all relationships to stranger defaults
+        rel_count = conn.execute("SELECT COUNT(*) as c FROM relationship").fetchone()["c"]
+        execute(conn, """UPDATE relationship SET
+            relationship_type = 'stranger',
+            favorability = 0,
+            familiarity = 0,
+            intimacy_comfort = 0,
+            love_eligible = 0,
+            jealousy_level = 0,
+            interaction_count = 0,
+            committed_since = NULL,
+            married_since = NULL,
+            breakup_count = 0,
+            divorced = 0,
+            violation_count = 0,
+            updated_at = datetime('now')
+        """)
+
+        conn.commit()
+        return {"status": "ok", "data": {
+            "dialogues_deleted": dialogue_count,
+            "memories_deleted": memory_count,
+            "embeddings_deleted": emb_count,
+            "relationships_reset": rel_count,
+        }}
+    finally:
+        conn.close()
+
+
+@router.post("/reset-cooldowns/{npc_id}")
+def reset_cooldowns(npc_id: str):
+    """Reset all action cooldowns for an NPC. Useful when testing rapid interactions."""
+    _require_admin()
+    conn = get_connection()
+    try:
+        execute(conn, "INSERT OR REPLACE INTO game_state(key, value) VALUES(?, ?)",
+                ("admin_reset_cooldowns", json.dumps({"npc_id": npc_id})))
+        conn.commit()
+        return {"status": "ok", "data": {"npc_id": npc_id, "cooldowns_reset": True}}
+    finally:
+        conn.close()
+
+
+# ── Process management ──────────────────────────────
+
+
+@router.get("/processes")
+def list_processes():
+    """List all managed processes with status from the supervisor's status file."""
+    _require_admin()
+    if not PROCESS_STATUS_FILE.exists():
+        return {"status": "ok", "data": {"updated_at": None, "processes": {}}}
+
+    try:
+        data = json.loads(PROCESS_STATUS_FILE.read_text())
+        return {"status": "ok", "data": data}
+    except (json.JSONDecodeError, OSError) as e:
+        return {"status": "ok", "data": {"updated_at": None, "processes": {}, "error": str(e)}}
+
+
+@router.post("/processes/{name}/restart")
+def restart_process(name: str):
+    """Publish a restart command to the supervisor via Redis."""
+    _require_admin()
+    try:
+        import redis
+        r = redis.from_url(os.environ.get("REDIS_URL", "redis://localhost:6379"))
+        cmd = json.dumps({"action": "restart", "process": name, "timestamp": datetime.now(timezone.utc).isoformat()})
+        r.publish(ADMIN_CMD_CHANNEL, cmd)
+        r.close()
+        return {"status": "ok", "data": {"process": name, "action": "restart", "dispatched": True}}
+    except Exception as e:
+        raise HTTPException(500, f"Failed to dispatch restart command: {e}")
+
+
+@router.post("/processes/{name}/stop")
+def stop_process(name: str):
+    """Publish a stop command to the supervisor via Redis."""
+    _require_admin()
+    try:
+        import redis
+        r = redis.from_url(os.environ.get("REDIS_URL", "redis://localhost:6379"))
+        cmd = json.dumps({"action": "stop", "process": name, "timestamp": datetime.now(timezone.utc).isoformat()})
+        r.publish(ADMIN_CMD_CHANNEL, cmd)
+        r.close()
+        return {"status": "ok", "data": {"process": name, "action": "stop", "dispatched": True}}
+    except Exception as e:
+        raise HTTPException(500, f"Failed to dispatch stop command: {e}")
+
+
+# ── Bulk state snapshot export ──────────────────────
+
+@router.get("/export")
+def export_full_state():
+    """Export full game state as JSON for debugging."""
+    _require_admin()
+    conn = get_connection()
+    try:
+        state = {
+            "player": [dict(r) for r in fetch_all(conn, "SELECT * FROM player")],
+            "npcs": [dict(r) for r in fetch_all(conn, "SELECT id, name, gender, personality, current_scene_id, current_mood, current_activity, attributes, is_active FROM npc")],
+            "scenes": [dict(r) for r in fetch_all(conn, "SELECT * FROM scene")],
+            "relationships": [dict(r) for r in fetch_all(conn, "SELECT * FROM relationship LIMIT 200")],
+            "game_state": {},
+        }
+        for r in fetch_all(conn, "SELECT key, value FROM game_state"):
+            try:
+                state["game_state"][r["key"]] = json.loads(r["value"])
+            except (json.JSONDecodeError, TypeError):
+                state["game_state"][r["key"]] = r["value"]
+
+        return {"status": "ok", "data": state}
+    finally:
+        conn.close()

@@ -1,0 +1,957 @@
+/* ═══════════════════════════════════════════════
+   城市小镇 - 组件样式 (卡通可爱风格)
+   ═══════════════════════════════════════════════ */
+
+/* ── NPC Card ────────────────────────────────── */
+
+.npc-card {
+  background: var(--bg-card);
+  border-radius: var(--border-radius);
+  padding: 8px;
+  box-shadow: var(--shadow-sm);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: 2px solid transparent;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+}
+
+.npc-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+  border-color: var(--accent-orange);
+}
+
+.npc-card.selected {
+  border-color: var(--accent-pink);
+  background: #FFF0F0;
+  box-shadow: 0 0 0 3px rgba(255, 138, 128, 0.2);
+}
+
+.npc-card .npc-avatar {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  margin: 0 auto 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+}
+
+.npc-avatar-img {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  object-fit: cover;
+  margin: 0 auto 6px;
+  display: block;
+  border: 2px solid #FFE0B2;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+
+.npc-avatar.male   { background: linear-gradient(135deg, #BBDEFB, #90CAF9); }
+.npc-avatar.female { background: linear-gradient(135deg, #F8BBD0, #F48FB1); }
+.npc-avatar.other  { background: linear-gradient(135deg, #D1C4E9, #B39DDB); }
+
+.npc-card .npc-name {
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--text-primary);
+  margin-bottom: 2px;
+}
+
+.npc-card .npc-role {
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+
+.npc-card .npc-career {
+  font-size: 11px;
+  color: #1565C0;
+  font-weight: 500;
+  margin-bottom: 4px;
+}
+
+.npc-card .npc-activity {
+  font-size: 11px;
+  color: var(--text-secondary);
+  background: #FFF8E1;
+  padding: 2px 8px;
+  border-radius: 10px;
+  display: inline-block;
+}
+
+.npc-card .npc-mood {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  font-size: 14px;
+}
+
+.npc-card .npc-in-dialogue {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  font-size: 10px;
+  background: #FF5252;
+  color: white;
+  padding: 2px 6px;
+  border-radius: 8px;
+  animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+/* ── Scene List Item ─────────────────────────── */
+
+.scene-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: var(--border-radius-sm);
+  cursor: pointer;
+  transition: all 0.15s;
+  margin-bottom: 4px;
+  font-size: 13px;
+}
+
+.scene-item:hover {
+  background: #FFF3E0;
+}
+
+.scene-item.selected {
+  background: #FFE0B2;
+  font-weight: 600;
+}
+
+.scene-item .scene-icon { font-size: 18px; }
+.scene-item .scene-name { flex: 1; color: var(--text-primary); }
+.scene-item .scene-npc-count {
+  font-size: 11px;
+  color: var(--text-muted);
+  background: white;
+  padding: 1px 8px;
+  border-radius: 10px;
+}
+
+/* ── NPC Detail Card (in sidebar) ────────────── */
+
+.npc-detail-card {
+  padding: 8px;
+  font-size: 13px;
+}
+
+.npc-detail-card .detail-name {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+  text-align: center;
+}
+
+.detail-avatar-wrap {
+  text-align: center;
+  margin-bottom: 8px;
+}
+
+.npc-detail-avatar {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 3px solid #FFE0B2;
+  box-shadow: 0 3px 12px rgba(0,0,0,0.1);
+  display: inline-block;
+}
+
+.npc-detail-avatar-fallback {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  font-size: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto;
+}
+
+.npc-detail-card .detail-section {
+  margin-bottom: 10px;
+}
+
+.npc-detail-card .detail-label {
+  font-weight: 700;
+  color: var(--accent-orange);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 3px;
+}
+
+.npc-detail-card .detail-value {
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.npc-detail-card .personality-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.personality-tag {
+  background: linear-gradient(135deg, #FFE0B2, #FFCC80);
+  color: #E65100;
+  padding: 2px 10px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+/* ── Dialogue Bubble ─────────────────────────── */
+
+.msg-bubble {
+  max-width: 80%;
+  padding: 10px 14px;
+  border-radius: 18px;
+  font-size: 14px;
+  line-height: 1.5;
+  animation: popIn 0.2s ease;
+  position: relative;
+}
+
+.msg-bubble.npc-msg {
+  align-self: flex-start;
+  background: white;
+  border: 1.5px solid #FFE0B2;
+  border-bottom-left-radius: 6px;
+  box-shadow: var(--shadow-sm);
+}
+
+.msg-bubble.player-msg {
+  align-self: flex-end;
+  background: linear-gradient(135deg, #FFE0B2, #FFCC80);
+  border-bottom-right-radius: 6px;
+  color: #5D4037;
+}
+
+.msg-bubble .msg-sender {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--accent-orange);
+  margin-bottom: 3px;
+}
+
+.msg-bubble .msg-fav-change {
+  font-size: 10px;
+  color: #4CAF50;
+  margin-top: 4px;
+  font-weight: 600;
+}
+
+.msg-bubble .msg-fav-change.negative {
+  color: #F44336;
+}
+
+.msg-status-row {
+  display: flex;
+  gap: 6px;
+  margin-top: 4px;
+  flex-wrap: wrap;
+}
+
+.msg-stat {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 8px;
+  background: #f5f5f5;
+}
+
+.msg-stat.positive {
+  color: #4CAF50;
+}
+
+.msg-stat.negative {
+  color: #F44336;
+}
+
+.msg-stat.mood-change {
+  background: #FFF8E1;
+  color: #F57C00;
+}
+
+/* ── Event Card ──────────────────────────────── */
+
+.event-card {
+  background: linear-gradient(135deg, #FFF8E1, #FFF3E0);
+  border-left: 3px solid var(--accent-orange);
+  padding: 8px 10px;
+  border-radius: 0 var(--border-radius-sm) var(--border-radius-sm) 0;
+  margin-bottom: 6px;
+  font-size: 12px;
+}
+
+.event-card .event-title {
+  font-weight: 700;
+  color: #E65100;
+  margin-bottom: 2px;
+}
+
+.event-card .event-desc {
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+/* ── Relationship Bar ────────────────────────── */
+
+.rel-bar-compact {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 4px 0;
+}
+
+.rel-bar-compact .rel-icon { font-size: 14px; }
+.rel-bar-compact .rel-label-c { font-size: 11px; color: var(--text-secondary); min-width: 28px; }
+.rel-bar-compact .rel-track { flex: 1; height: 6px; background: #FFE0B2; border-radius: 3px; overflow: hidden; }
+.rel-bar-compact .rel-track-fill { height: 100%; border-radius: 3px; transition: width 0.5s ease; }
+.rel-bar-compact .rel-num { font-size: 10px; font-weight: 700; color: var(--text-primary); min-width: 24px; text-align: right; }
+
+/* ── Action Panel ─────────────────────────────── */
+
+.dialogue-actions {
+  border-top: 1px solid var(--border-color);
+  background: #FFFBF6;
+  padding: 6px 12px;
+}
+
+.actions-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+
+.act-tab {
+  padding: 4px 12px;
+  border: 1.5px solid #FFE0B2;
+  border-radius: 14px;
+  background: white;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.act-tab:hover {
+  background: #FFF3E0;
+  color: var(--accent-orange);
+}
+
+.act-tab.active {
+  background: linear-gradient(135deg, #FFE0B2, #FFCC80);
+  color: #BF360C;
+  border-color: #FFB74D;
+}
+
+.actions-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  max-height: 56px;
+  overflow-y: auto;
+}
+
+.act-btn {
+  padding: 4px 12px;
+  border: 1.5px solid #FFE0B2;
+  border-radius: 14px;
+  background: white;
+  font-size: 12px;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.act-btn:hover:not(.locked) {
+  background: #FFF3E0;
+  border-color: var(--accent-orange);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(255, 171, 64, 0.15);
+}
+
+.act-btn.locked {
+  background: #F5F5F5;
+  border-color: #E0E0E0;
+  color: var(--text-muted);
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.act-btn.locked::after {
+  content: ' 🔒';
+  font-size: 10px;
+}
+
+/* ── Weather & Message text ──────────────────── */
+
+.weather-text {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.msg-content {
+  line-height: 1.6;
+  color: var(--text-primary);
+}
+
+/* ── Content segment types ─────────────────── */
+
+.msg-dialogue {
+  color: #3E2723;
+  font-weight: 500;
+  position: relative;
+}
+
+.msg-dialogue-text {
+  /* spoken dialogue */
+}
+
+.btn-play-segment {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: 1px solid #FFE0B2;
+  border-radius: 50%;
+  background: #FFF8E1;
+  font-size: 10px;
+  cursor: pointer;
+  vertical-align: middle;
+  margin-left: 2px;
+  transition: all 0.15s;
+  flex-shrink: 0;
+}
+
+.btn-play-segment:hover {
+  background: #FFE0B2;
+  border-color: var(--accent-orange);
+  transform: scale(1.1);
+}
+
+.btn-play-segment.playing {
+  background: var(--accent-orange);
+  border-color: #FF9100;
+  animation: pulse-glow 1.5s ease-in-out infinite;
+}
+
+.msg-replay-row {
+  text-align: right;
+  margin-top: 4px;
+  padding-top: 2px;
+}
+
+.btn-replay-msg {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 8px;
+  border: 1px solid #E0E0E0;
+  border-radius: 12px;
+  background: #F5F5F5;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.15s;
+  color: var(--text-secondary);
+}
+
+.btn-replay-msg:hover {
+  background: #FFF3E0;
+  border-color: var(--accent-orange);
+  color: var(--accent-orange);
+}
+
+.btn-replay-msg.playing {
+  background: var(--accent-orange);
+  border-color: #FF9100;
+  color: #fff;
+  animation: pulse-glow 1.5s ease-in-out infinite;
+}
+
+.msg-action {
+  color: #9E9E9E;
+  font-style: italic;
+  font-size: 0.92em;
+}
+
+.msg-narrative {
+  color: var(--text-secondary);
+}
+
+/* Highlight the sentence currently being spoken */
+.msg-chunk-speaking {
+  background: rgba(255, 171, 64, 0.15);
+  border-radius: 4px;
+  padding: 1px 2px;
+  transition: background 0.2s;
+}
+
+/* ── Social Bubbles (NPC→NPC, NPC→Player, inner thoughts) ── */
+
+.npc-social-bubble {
+  position: absolute;
+  top: -36px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 4px 12px;
+  border-radius: 14px;
+  font-size: 11px;
+  white-space: nowrap;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  z-index: 10;
+  animation: bubbleIn 0.3s ease, bubbleFade 4.5s ease 0.5s forwards;
+  pointer-events: none;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.social-bubble {
+  background: #FFF8E1;
+  border: 1px solid #FFE0B2;
+  color: #5D4037;
+}
+
+.intimate-bubble {
+  background: #FCE4EC;
+  border: 1px solid #F8BBD0;
+  color: #880E4F;
+}
+
+.action-bubble {
+  background: #E8F5E9;
+  border: 1px solid #C8E6C9;
+  color: #1B5E20;
+}
+
+.thought-bubble {
+  background: #F5F5F5;
+  border: 1px solid #E0E0E0;
+  color: #757575;
+  font-style: italic;
+}
+
+@keyframes bubbleIn {
+  from { opacity: 0; transform: translateX(-50%) translateY(8px); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+@keyframes bubbleFade {
+  to { opacity: 0; transform: translateX(-50%) translateY(-8px); }
+}
+
+/* ── Social Feed Cards ──────────────────────── */
+
+.social-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius-sm);
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  transition: box-shadow 0.15s;
+}
+
+.social-card:hover {
+  box-shadow: var(--shadow-sm);
+}
+
+.social-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.social-card-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #FFE0B2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.social-card-author {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.social-card-author:hover {
+  color: var(--accent-orange);
+  text-decoration: underline;
+}
+
+.social-card-time {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-left: auto;
+}
+
+.social-card-body {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-primary);
+  margin-bottom: 6px;
+  word-break: break-word;
+}
+
+.social-card-footer {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.social-card-mood {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 8px;
+  font-size: 10px;
+  background: #FFF3E0;
+  color: #E65100;
+}
+
+.social-card-tag {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 8px;
+  font-size: 10px;
+  background: #E8F5E9;
+  color: #1B5E20;
+}
+
+.social-card-tag.reject { background: #FFEBEE; color: #C62828; }
+.social-card-tag.accept { background: #E8F5E9; color: #1B5E20; }
+.social-card-tag.invitation { background: #E3F2FD; color: #0D47A1; }
+.social-card-tag.complete { background: #F3E5F5; color: #6A1B9A; }
+.social-card-tag.auto_action { background: #FFF8E1; color: #E65100; }
+.social-card-tag.auto-cat-solo { background: #F5F5F5; color: #757575; }
+.social-card-tag.auto-cat-friendly { background: #E8F5E9; color: #2E7D32; }
+.social-card-tag.auto-cat-intimate { background: #FCE4EC; color: #C2185B; }
+.social-card-tag.auto-cat-couple { background: #F3E5F5; color: #7B1FA2; }
+.social-card-tag.auto-cat-negative { background: #FFEBEE; color: #C62828; }
+.social-card-tag.auto-cat-force { background: #FFF3E0; color: #BF360C; }
+.social-card-tag.auto-cat-agility { background: #E0F7FA; color: #006064; }
+
+.social-card-auto { border-left: 3px solid #FF9800; }
+
+/* Card border colors for all categories */
+.card-cat-solo { border-color: #E0E0E0; }
+.card-cat-friendly { border-color: #A5D6A7; }
+.card-cat-intimate { border-color: #F48FB1; }
+.card-cat-couple { border-color: #CE93D8; }
+.card-cat-negative { border-color: #EF5350; }
+.card-cat-force { border-color: #FF7043; }
+.card-cat-agility { border-color: #26C6DA; }
+
+.btn-social-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  background: white;
+  font-size: 11px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.15s;
+}
+
+.btn-social-action:hover {
+  background: #FFF3E0;
+  border-color: var(--accent-orange);
+  color: var(--accent-orange);
+}
+
+.btn-social-action.liked {
+  background: #FFEBEE;
+  border-color: #EF5350;
+  color: #C62828;
+}
+
+/* Comment section */
+.social-comments {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--border-color);
+}
+
+.social-comment {
+  padding: 4px 0;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.social-comment-author {
+  font-weight: 600;
+  color: var(--accent-orange);
+  margin-right: 4px;
+}
+
+.social-comment-input-row {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.social-comment-input {
+  flex: 1;
+  padding: 4px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  font-size: 12px;
+  font-family: inherit;
+  color: var(--text-primary);
+  background: var(--bg-input);
+}
+
+.social-comment-input:focus {
+  outline: none;
+  border-color: var(--accent-orange);
+  box-shadow: 0 0 0 2px rgba(255, 171, 64, 0.15);
+}
+
+.btn-comment-submit {
+  padding: 4px 12px;
+  border: none;
+  border-radius: 14px;
+  background: var(--accent-orange);
+  color: white;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.15s;
+}
+
+.btn-comment-submit:hover { background: #FF9100; }
+
+/* NPC detail in social panel */
+.social-npc-detail {
+  padding: 4px 0;
+}
+
+.social-npc-rels {
+  margin-top: 12px;
+}
+
+.social-npc-rel-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius-sm);
+  margin-bottom: 4px;
+  font-size: 12px;
+}
+
+.social-npc-rel-name {
+  font-weight: 600;
+  color: var(--text-primary);
+  min-width: 60px;
+}
+
+.social-npc-rel-type {
+  color: var(--accent-orange);
+  font-size: 11px;
+  min-width: 50px;
+}
+
+.social-npc-rel-fav {
+  color: var(--mood-happy);
+  font-size: 11px;
+  margin-left: auto;
+}
+
+/* Select NPC for detail */
+.social-npc-select {
+  width: 100%;
+  padding: 6px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius-sm);
+  font-size: 13px;
+  font-family: inherit;
+  color: var(--text-primary);
+  background: white;
+  margin-bottom: 8px;
+}
+
+.btn-back-npc-select {
+  padding: 4px 10px;
+  font-size: 12px;
+  font-family: inherit;
+  color: var(--accent-orange);
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius-sm);
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.btn-back-npc-select:hover {
+  background: var(--accent-orange);
+  color: white;
+}
+
+.social-npc-quick-switch {
+  flex: 1;
+  margin-bottom: 0;
+  min-width: 0;
+}
+
+/* ═══════════════════════════════════════════════
+   NPC Autonomous Action — CSS Animations
+   Mapped from AnimType enum in action_rules.py
+   ═══════════════════════════════════════════════ */
+
+/* ── Keyframes ─────────────────────────────── */
+
+@keyframes cssPulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.08); }
+}
+
+@keyframes cssBounce {
+  0%, 100% { transform: translateY(0); }
+  30% { transform: translateY(-6px); }
+  50% { transform: translateY(0); }
+  70% { transform: translateY(-3px); }
+}
+
+@keyframes cssSwing {
+  0%, 100% { transform: rotate(0deg); }
+  25% { transform: rotate(4deg); }
+  75% { transform: rotate(-4deg); }
+}
+
+@keyframes cssShake {
+  0%, 100% { transform: translateX(0); }
+  15% { transform: translateX(-4px); }
+  30% { transform: translateX(4px); }
+  45% { transform: translateX(-3px); }
+  60% { transform: translateX(3px); }
+  75% { transform: translateX(-1px); }
+}
+
+@keyframes cssFloat {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-5px); }
+}
+
+@keyframes cssSpin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+@keyframes cssFade {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+/* ── NPC Card animation classes ────────────── */
+
+.npc-card.css-pulse  { animation: cssPulse 1.2s ease-in-out infinite; }
+.npc-card.css-bounce { animation: cssBounce 0.8s ease-in-out infinite; }
+.npc-card.css-swing  { animation: cssSwing 1.5s ease-in-out infinite; }
+.npc-card.css-shake  { animation: cssShake 0.6s ease-in-out infinite; }
+.npc-card.css-float  { animation: cssFloat 2s ease-in-out infinite; }
+.npc-card.css-spin   { animation: cssSpin 3s linear infinite; }
+.npc-card.css-fade   { animation: cssFade 2s ease-in-out infinite; }
+
+/* ── Category accent borders ───────────────── */
+
+.npc-card.card-cat-solo     { border-color: #E0E0E0; }
+.npc-card.card-cat-friendly { border-color: #A5D6A7; }
+.npc-card.card-cat-intimate { border-color: #F48FB1; }
+.npc-card.card-cat-couple   { border-color: #CE93D8; }
+.npc-card.card-cat-negative { border-color: #EF5350; }
+
+/* ── Auto action label on NPC card ─────────── */
+
+.npc-auto-action {
+  font-size: 11px;
+  color: var(--text-secondary);
+  background: #FFF8E1;
+  padding: 2px 8px;
+  border-radius: 10px;
+  display: inline-block;
+  margin-top: 4px;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  animation: cssFade 2s ease-in-out infinite;
+}
+
+/* ── Auto action bubbles ───────────────────── */
+
+.auto-action-bubble {
+  font-size: 11px;
+  padding: 4px 12px;
+  border-radius: 14px;
+  white-space: nowrap;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.auto-bubble-solo {
+  background: #F5F5F5;
+  border: 1px solid #E0E0E0;
+  color: #757575;
+}
+
+.auto-bubble-friendly {
+  background: #E8F5E9;
+  border: 1px solid #C8E6C9;
+  color: #2E7D32;
+}
+
+.auto-bubble-intimate {
+  background: #FCE4EC;
+  border: 1px solid #F8BBD0;
+  color: #AD1457;
+}
+
+.auto-bubble-couple {
+  background: #F3E5F5;
+  border: 1px solid #E1BEE7;
+  color: #6A1B9A;
+}
+
+.auto-bubble-negative {
+  background: #FFEBEE;
+  border: 1px solid #FFCDD2;
+  color: #C62828;
+}

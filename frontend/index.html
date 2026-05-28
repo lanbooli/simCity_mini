@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>城市小镇</title>
+<link rel="stylesheet" href="css/reset.css?v=14">
+<link rel="stylesheet" href="css/main.css?v=16">
+<link rel="stylesheet" href="css/components.css?v=14">
+<link rel="stylesheet" href="css/admin.css?v=14">
+</head>
+<body>
+
+<!-- Panel 1: Top Bar -->
+<!-- Main View (default, full screen) -->
+<div class="main-view" id="mainView">
+  <header class="topbar" id="topBar">
+    <div class="topbar-title">
+      <span class="title-icon">🏘️</span>
+      <h1>城市小镇</h1>
+    </div>
+    <div class="topbar-center">
+      <span class="game-clock" id="gameClock">Day 1 · 08:00</span>
+      <span class="game-season" id="gameSeason">🌱 春天</span>
+      <span class="game-phase" id="gamePhase">☀️ 早晨</span>
+    </div>
+    <div class="topbar-weather" id="weatherBadge">
+      <span class="weather-icon">☀️</span>
+      <span class="weather-text">晴天</span>
+    </div>
+    <button class="btn-reset-all" id="btnResetAll" title="重置所有记忆和对话" onclick="App.resetAll()">🔄 重置</button>
+    <button class="btn-social-circle" id="btnSocialCircle" title="社交圈">📢 社交圈</button>
+    <button class="btn-player-settings" id="btnPlayerSettings" title="个人信息">👤 我</button>
+  </header>
+
+  <!-- Scene View -->
+  <main class="scene-view" id="sceneView">
+    <div class="scene-header" id="sceneHeader">
+      <h2>☕ 阳光咖啡店</h2>
+      <p class="scene-desc">一家温馨的街角咖啡店...</p>
+    </div>
+    <div class="room-bar" id="roomBar" style="display:none;">
+      <!-- Populated by JS for home scenes -->
+    </div>
+    <div class="npc-grid" id="npcGrid">
+      <!-- Populated by JS -->
+    </div>
+    <div class="items-bar" id="itemsBar">
+      <span class="items-label">📦 道具:</span>
+      <!-- Populated by JS -->
+    </div>
+  </main>
+
+  <!-- Bottom Scene Quick-Switch Bar -->
+  <div class="scene-bar" id="sceneBar">
+    <!-- Populated by JS -->
+  </div>
+</div>
+
+<!-- Panel 4: Dialogue Window -->
+<footer class="dialogue-panel" id="dialoguePanel">
+  <div class="dialogue-resize-handle" id="dialogueResizeHandle" title="拖动调整聊天框大小"></div>
+  <div class="dialogue-header" id="dialogueHeader">
+    <span class="dialogue-placeholder">选择一个NPC开始对话 💬</span>
+    <div class="dialogue-relationship" id="dialogueRel" style="display:none;">
+      <span class="rel-type"></span>
+      <div class="rel-bars">
+        <div class="rel-bar">
+          <span class="rel-label">❤️ 好感</span>
+          <div class="rel-progress"><div class="rel-fill fav-fill" id="favBar"></div></div>
+          <span class="rel-value" id="favValue">0</span>
+        </div>
+        <div class="rel-bar">
+          <span class="rel-label">👋 熟悉</span>
+          <div class="rel-progress"><div class="rel-fill fam-fill" id="famBar"></div></div>
+          <span class="rel-value" id="famValue">0</span>
+        </div>
+      </div>
+    </div>
+    <div class="dialogue-header-actions">
+      <span class="audio-playing-indicator" id="audioPlayingIndicator" title="NPC语音播放中">🔊 语音播放中...</span>
+      <button class="btn-header-icon" id="btnDialogueMax" title="最大化聊天框">⤢</button>
+    </div>
+  </div>
+  <div class="dialogue-messages" id="dialogueMessages">
+    <div class="empty-hint">👋 点击场景中的NPC开始对话吧！</div>
+  </div>
+  <div class="dialogue-typing" id="typingIndicator" style="display:none;">
+    <span class="typing-dots"><span>.</span><span>.</span><span>.</span></span>
+    <span id="typingName">NPC</span> 正在输入...
+  </div>
+  <div class="dialogue-actions" id="dialogueActions" style="display:none;">
+    <div class="actions-tabs" id="actionsTabs">
+      <button class="act-tab active" data-cat="friendly">😊 友善</button>
+      <button class="act-tab" data-cat="intimate">💕 亲密</button>
+      <button class="act-tab" data-cat="couple">❤️ 情侣</button>
+      <button class="act-tab" data-cat="physical">💪 动作</button>
+      <button class="act-tab" data-cat="negative">😠 其他</button>
+    </div>
+    <div class="actions-grid" id="actionsGrid">
+      <!-- Populated by JS -->
+    </div>
+  </div>
+  <div class="dialogue-input-area">
+    <input type="text" class="dialogue-input" id="dialogueInput"
+           placeholder="输入你想说的话，或点击上方动作按钮..." disabled>
+    <button class="btn-send" id="btnSend" disabled>发送</button>
+    <button class="btn-voice" id="btnVoice" disabled title="语音播放中 (点击关闭)">🔊</button>
+  </div>
+  <div class="dialogue-idle" id="idleTimer" style="display:none;">
+    ⏱ 空闲: <span id="idleCountdown">10:00</span>
+  </div>
+</footer>
+
+<!-- Social View (full-screen overlay) -->
+<div class="fullscreen-overlay" id="socialView" style="display:none;">
+  <div class="fullscreen-header">
+    <button class="btn-back" onclick="App.showMain()">◀ 返回小镇</button>
+    <span class="fullscreen-title">📢 社交圈</span>
+    <div class="fullscreen-header-actions">
+      <button class="btn-header-icon" id="btnSocialFilterToggle" title="筛选">🔍</button>
+      <button class="btn-header-icon" id="btnSocialClose" title="关闭">×</button>
+    </div>
+  </div>
+  <div class="social-panel-tabs" id="socialTabs">
+    <button class="social-tab active" data-tab="broadcasts">📡 广播</button>
+    <button class="social-tab" data-tab="posts">📝 帖子</button>
+    <button class="social-tab" data-tab="npc_detail">👤 NPC详情</button>
+  </div>
+  <div class="social-panel-filters" id="socialFilters" style="display:none;">
+    <select class="social-filter-select" id="socialFilterNpc">
+      <option value="">全部NPC</option>
+    </select>
+    <select class="social-filter-select" id="socialFilterType">
+      <option value="">全部类型</option>
+    </select>
+  </div>
+  <div class="social-panel-content" id="socialContent">
+    <div class="empty-hint">加载中...</div>
+  </div>
+</div>
+
+<!-- Character View (full-screen overlay) -->
+<div class="fullscreen-overlay" id="characterView" style="display:none;">
+  <div class="fullscreen-header">
+    <button class="btn-back" onclick="App.showMain()">◀ 返回小镇</button>
+    <span class="fullscreen-title">👤 角色详情</span>
+    <button class="btn-header-icon" id="btnCharacterClose" title="关闭">×</button>
+  </div>
+  <div class="character-content" id="characterContent">
+    <div class="empty-hint">点击NPC查看详情</div>
+  </div>
+</div>
+
+<!-- Player Settings Overlay -->
+<div class="player-settings-overlay" id="playerSettingsOverlay" style="display:none;">
+  <div class="player-settings-dialog">
+    <div class="player-settings-header">
+      <span id="psTitle">👤 个人信息</span>
+      <button class="btn-header-icon" id="btnPlayerSettingsClose" title="关闭">×</button>
+    </div>
+    <div class="ps-tabs" id="psTabs">
+      <button class="ps-tab active" data-tab="detail">📋 详情</button>
+      <button class="ps-tab" data-tab="edit">✏️ 编辑</button>
+    </div>
+    <!-- Detail View -->
+    <div class="ps-content" id="psDetailView">
+      <div class="ps-profile-card" id="psProfileCard"></div>
+      <div class="ps-section">
+        <h3>💕 关系列表</h3>
+        <div class="ps-rel-list" id="psRelList"></div>
+      </div>
+    </div>
+    <!-- Edit View -->
+    <div class="ps-content" id="psEditView" style="display:none;">
+      <div class="ps-section">
+        <h3>基本信息</h3>
+        <div class="ps-field">
+          <label for="psName">名字</label>
+          <input type="text" id="psName" placeholder="你的名字" maxlength="20">
+        </div>
+        <div class="ps-field">
+          <label for="psGender">性别</label>
+          <select id="psGender">
+            <option value="male">男</option>
+            <option value="female">女</option>
+            <option value="other">其他</option>
+          </select>
+        </div>
+        <div class="ps-field">
+          <label for="psBirthDate">出生日期</label>
+          <input type="date" id="psBirthDate">
+        </div>
+        <div class="ps-field">
+          <label for="psCareer">职业/身份</label>
+          <input type="text" id="psCareer" placeholder="如：学生、程序员、画家..." maxlength="20">
+        </div>
+      </div>
+      <div class="ps-section">
+        <h3>外貌特征</h3>
+        <div class="ps-field-row">
+          <div class="ps-field">
+            <label for="psApp_height">身高</label>
+            <input type="text" id="psApp_height" placeholder="如：170cm" maxlength="10">
+          </div>
+          <div class="ps-field">
+            <label for="psApp_build">体型</label>
+            <input type="text" id="psApp_build" placeholder="如：普通、健壮、苗条" maxlength="10">
+          </div>
+        </div>
+        <div class="ps-field-row">
+          <div class="ps-field">
+            <label for="psApp_hair">发型/发色</label>
+            <input type="text" id="psApp_hair" placeholder="如：黑色短发" maxlength="15">
+          </div>
+          <div class="ps-field">
+            <label for="psApp_eyes">眼睛</label>
+            <input type="text" id="psApp_eyes" placeholder="如：棕色大眼睛" maxlength="15">
+          </div>
+        </div>
+        <div class="ps-field-row">
+          <div class="ps-field">
+            <label for="psApp_skin">肤色</label>
+            <input type="text" id="psApp_skin" placeholder="如：白皙、小麦色" maxlength="10">
+          </div>
+        </div>
+      </div>
+      <div class="ps-section">
+        <h3>性格特点</h3>
+        <div class="ps-field">
+          <label for="psPersonality">性格标签（用逗号或空格分隔）</label>
+          <input type="text" id="psPersonality" placeholder="如：友好 好奇 幽默 害羞" maxlength="100">
+        </div>
+      </div>
+      <div class="ps-actions">
+        <button type="button" class="btn-save" id="btnPlayerSettingsSave">保存</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- GAL Dialogue Overlay (full-screen visual novel style) -->
+<div class="gal-overlay" id="galDialogueOverlay" style="display:none;">
+  <!-- Top bar -->
+  <div class="gal-topbar">
+    <button class="gal-btn-back" id="galBtnBack" title="返回小镇">◀ 返回小镇</button>
+    <div class="gal-topbar-center">
+      <span class="gal-topbar-title" id="galTitle">💬 对话</span>
+      <span class="gal-rel-tag" id="galRelTag">陌生人</span>
+    </div>
+    <div class="gal-topbar-right">
+      <div class="gal-rel-mini">
+        <span class="gal-rel-stat">❤️ <span id="galFavVal">0</span></span>
+        <span class="gal-rel-stat">👋 <span id="galFamVal">0</span></span>
+        <span class="gal-rel-stat gal-mood-stat" id="galMoodStat">😐</span>
+      </div>
+      <button class="gal-btn-icon" id="galBtnDebug" title="关系调试">⚙️</button>
+      <button class="gal-btn-icon" id="galBtnHistory" title="历史对话">📋</button>
+      <button class="gal-btn-icon" id="galBtnVoice" title="语音切换">🔊</button>
+    </div>
+  </div>
+
+  <!-- Debug panel (hidden by default) -->
+  <div class="gal-debug-panel" id="galDebugPanel" style="display:none;">
+    <div class="gal-debug-row">
+      <label>❤️ 好感 <input type="number" id="galDebugFav" min="-100" max="100" value="0" style="width:60px"></label>
+      <label>👋 熟悉 <input type="number" id="galDebugFam" min="0" max="100" value="0" style="width:60px"></label>
+      <label>关系 <select id="galDebugRelType">
+        <option value="stranger">陌生人</option>
+        <option value="acquaintance">认识的人</option>
+        <option value="friend">朋友</option>
+        <option value="best_friend">好朋友</option>
+        <option value="boyfriend">男朋友</option>
+        <option value="girlfriend">女朋友</option>
+        <option value="spouse">配偶</option>
+        <option value="dislike">讨厌的人</option>
+        <option value="enemy">仇敌</option>
+      </select></label>
+      <button class="gal-btn-apply" id="galBtnApplyDebug">应用</button>
+    </div>
+  </div>
+
+  <!-- Main content: portrait + textbox -->
+  <div class="gal-main">
+    <!-- NPC Portrait Area -->
+    <div class="gal-portrait-area" id="galPortraitArea">
+      <div class="gal-portrait" id="galPortrait">
+        <div class="gal-portrait-emoji" id="galPortraitEmoji">🧑</div>
+        <img class="gal-portrait-img" id="galPortraitImg" src="" alt="" style="display:none;">
+      </div>
+      <div class="gal-npc-info">
+        <span class="gal-npc-status" id="galNpcStatus">闲逛中</span>
+        <span class="gal-npc-name-label" id="galNpcNameLabel">NPC名字</span>
+      </div>
+    </div>
+
+    <!-- Dialogue Textbox -->
+    <div class="gal-textbox" id="galTextbox">
+      <div class="gal-textbox-inner">
+        <div class="gal-textbox-history" id="galTextboxHistory"></div>
+        <div class="gal-textbox-current" id="galTextboxCurrent">
+          <span class="gal-textbox-speaker" id="galTextboxSpeaker">NPC</span>
+          <div class="gal-textbox-msg" id="galTextboxMsg">点击场景中的NPC开始对话吧！</div>
+        </div>
+        <div class="gal-replay-row" id="galReplayRow" style="display:none;">
+          <button class="gal-btn-replay" id="galBtnReplay">🔊 重播</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Simple Action Bar -->
+    <div class="gal-actions-simple" id="galActionsSimple">
+      <!-- Populated by JS -->
+    </div>
+
+    <!-- Expanded Action Panel -->
+    <div class="gal-actions-expanded" id="galActionsExpanded" style="display:none;">
+      <div class="gal-actions-tabs" id="galActionsTabs">
+        <button class="gal-act-tab active" data-cat="friendly">😊 友善</button>
+        <button class="gal-act-tab" data-cat="intimate">💕 亲密</button>
+        <button class="gal-act-tab" data-cat="couple">❤️ 情侣</button>
+        <button class="gal-act-tab" data-cat="physical">💪 动作</button>
+        <button class="gal-act-tab" data-cat="negative">😠 其他</button>
+      </div>
+      <div class="gal-actions-grid" id="galActionsGrid">
+        <!-- Populated by JS -->
+      </div>
+      <button class="gal-btn-collapse" id="galBtnCollapse">收起 ▲</button>
+    </div>
+  </div>
+
+  <!-- Input Area -->
+  <div class="gal-input-area">
+    <input type="text" class="gal-input" id="galDialogueInput"
+           placeholder="输入你想说的话，或点击上方动作按钮..." disabled>
+    <button class="gal-btn-send" id="galBtnSend" disabled>发送</button>
+    <span class="gal-idle-timer" id="galIdleTimer" style="display:none;">⏱ <span id="galIdleCountdown">10:00</span></span>
+  </div>
+
+  <!-- Audio indicator -->
+  <span class="gal-audio-indicator" id="galAudioIndicator">🔊 语音播放中...</span>
+
+  <!-- History Overlay -->
+  <div class="gal-history-overlay" id="galHistoryOverlay" style="display:none;">
+    <div class="gal-history-header">
+      <span class="gal-history-title">📋 历史对话</span>
+      <button class="gal-btn-close-history" id="galBtnCloseHistory">✕</button>
+    </div>
+    <div class="gal-history-scroll" id="galHistoryScroll">
+      <div class="gal-history-loading">加载中...</div>
+    </div>
+  </div>
+</div>
+
+<script src="js/store.js?v=13"></script>
+<script src="js/websocket.js?v=28"></script>
+<script src="js/audioPlayer.js?v=20"></script>
+<script src="js/api.js?v=14"></script>
+<script src="js/components/relationshipBar.js?v=13"></script>
+<script src="js/renderer/actionRenderer.js?v=2"></script>
+<script src="js/components/npcCard.js?v=14"></script>
+<script src="js/panels/topBar.js?v=13"></script>
+<script src="js/panels/sidebar.js?v=14"></script>
+<script src="js/panels/sceneView.js?v=21"></script>
+<script src="js/panels/dialogue.js?v=22"></script>
+<script src="js/panels/socialCircle.js?v=21"></script>
+<script src="js/panels/adminPanel.js?v=13"></script>
+<script src="js/panels/playerSettings.js?v=13"></script>
+<script src="js/panels/galDialogue.js?v=13"></script>
+<script src="js/main.js?v=14"></script>
+</body>
+</html>

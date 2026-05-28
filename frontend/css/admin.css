@@ -1,0 +1,265 @@
+/* ═══════════════════════════════════════════════
+   管理面板 - Admin Panel Styles
+   ═══════════════════════════════════════════════ */
+
+.admin-panel {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  z-index: 9999;
+  background: rgba(0,0,0,0.85);
+  display: flex;
+  flex-direction: column;
+  font-size: 13px;
+  color: #e0e0e0;
+  font-family: system-ui, -apple-system, sans-serif;
+}
+
+.admin-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 16px;
+  background: #1a1a2e;
+  border-bottom: 1px solid #333;
+  font-weight: 700;
+  font-size: 16px;
+}
+
+.admin-close {
+  background: none;
+  border: none;
+  color: #999;
+  font-size: 22px;
+  cursor: pointer;
+  padding: 0 8px;
+}
+.admin-close:hover { color: #ff5252; }
+
+.admin-body {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+.admin-left {
+  width: 300px;
+  min-width: 300px;
+  background: #16213e;
+  border-right: 1px solid #333;
+  overflow-y: auto;
+  padding: 8px;
+}
+
+.admin-right {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px 16px;
+  background: #0f0f23;
+}
+
+.admin-placeholder {
+  color: #666;
+  text-align: center;
+  margin-top: 40px;
+  font-size: 14px;
+}
+
+.admin-section {
+  margin-bottom: 12px;
+}
+
+.admin-section-title {
+  font-weight: 700;
+  font-size: 12px;
+  color: #ff9800;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.admin-search {
+  width: 100%;
+  padding: 6px 10px;
+  border: 1px solid #444;
+  border-radius: 6px;
+  background: #0a0a1a;
+  color: #e0e0e0;
+  font-size: 12px;
+  margin-bottom: 6px;
+  box-sizing: border-box;
+}
+.admin-search:focus { outline: none; border-color: #ff9800; }
+
+.admin-npc-list {
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.admin-npc-item {
+  padding: 6px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  transition: background 0.1s;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.admin-npc-item:hover { background: #1a2744; }
+.admin-npc-item.selected { background: #ff9800; color: #000; }
+
+.admin-empty { color: #666; font-size: 11px; padding: 8px; }
+
+.admin-btn-sm {
+  padding: 4px 10px;
+  border: 1px solid #555;
+  border-radius: 5px;
+  background: #1a1a2e;
+  color: #ccc;
+  font-size: 11px;
+  cursor: pointer;
+  margin: 2px;
+  transition: all 0.15s;
+}
+.admin-btn-sm:hover { background: #333; border-color: #ff9800; color: #ff9800; }
+
+.admin-select, .admin-input {
+  padding: 5px 8px;
+  border: 1px solid #444;
+  border-radius: 5px;
+  background: #0a0a1a;
+  color: #e0e0e0;
+  font-size: 12px;
+  margin: 2px 0;
+  box-sizing: border-box;
+}
+.admin-select:focus, .admin-input:focus { outline: none; border-color: #ff9800; }
+.admin-input { width: 100%; }
+
+.admin-card {
+  max-width: 500px;
+}
+
+.admin-card h3 {
+  font-size: 18px;
+  margin-bottom: 12px;
+  color: #ff9800;
+}
+.admin-card h3 small { color: #666; font-size: 11px; }
+
+.admin-card-section {
+  background: #16213e;
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+}
+
+.admin-label {
+  font-weight: 700;
+  font-size: 11px;
+  color: #4fc3f7;
+  margin-bottom: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.admin-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0;
+  font-size: 12px;
+}
+.admin-row input[type="range"] { flex: 1; accent-color: #ff9800; }
+
+.admin-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+/* Process management */
+.admin-process-list {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.admin-process-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 8px;
+  margin: 3px 0;
+  background: #0a0a1a;
+  border-radius: 5px;
+  border: 1px solid #2a2a3e;
+  font-size: 11px;
+}
+
+.admin-process-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.admin-process-name {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+}
+
+.admin-process-type {
+  font-size: 9px;
+  background: #1a1a2e;
+  color: #888;
+  padding: 1px 5px;
+  border-radius: 3px;
+  white-space: nowrap;
+}
+
+.admin-process-desc {
+  color: #999;
+  font-size: 10px;
+  margin-top: 1px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.admin-process-meta {
+  color: #666;
+  font-size: 10px;
+  margin-top: 1px;
+}
+
+.admin-process-actions {
+  display: flex;
+  gap: 3px;
+  flex-shrink: 0;
+  margin-left: 8px;
+}
+
+.admin-btn-danger:hover {
+  background: #4a1a1a !important;
+  border-color: #ff5252 !important;
+  color: #ff5252 !important;
+}
+
+.admin-process-updated {
+  font-size: 10px;
+  color: #555;
+  text-align: right;
+  margin-top: 4px;
+}
+
+/* Scrollbar styling */
+.admin-left::-webkit-scrollbar,
+.admin-right::-webkit-scrollbar { width: 6px; }
+.admin-left::-webkit-scrollbar-track,
+.admin-right::-webkit-scrollbar-track { background: transparent; }
+.admin-left::-webkit-scrollbar-thumb,
+.admin-right::-webkit-scrollbar-thumb { background: #444; border-radius: 3px; }

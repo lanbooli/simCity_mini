@@ -1,0 +1,110 @@
+{
+  "npc_li_ming": {
+    "primary": 2,
+    "secondary": [],
+    "romance": 17,
+    "notes": "善良温柔 + 深情依恋。温和细心，内向但乐于助人。"
+  },
+  "npc_wang_fang": {
+    "primary": 10,
+    "secondary": [],
+    "romance": 17,
+    "notes": "活泼乐天 + 深情依恋。开朗话多，八卦热心。"
+  },
+  "npc_zhang_wei": {
+    "primary": 15,
+    "secondary": [],
+    "romance": 17,
+    "notes": "少年意气 + 深情依恋。自信直爽，保护欲强。"
+  },
+  "npc_chen_xue": {
+    "primary": 11,
+    "secondary": [2],
+    "romance": 19,
+    "notes": "敏感内向 + 善良温柔 + 缺爱依恋。温柔安静，忧郁细腻。"
+  },
+  "npc_liu_jie": {
+    "primary": 6,
+    "secondary": [],
+    "romance": 18,
+    "notes": "圆滑世故 + 冷淡薄情。热情唠叨是表面，内心清醒。"
+  },
+  "npc_photo_01": {
+    "primary": 10,
+    "secondary": [30],
+    "romance": 17,
+    "notes": "苏晓萌：活泼乐天 + 单纯天真 + 深情依恋。主动但害羞，易被打动。"
+  },
+  "npc_photo_02": {
+    "primary": 2,
+    "secondary": [14],
+    "romance": 19,
+    "notes": "林雨桐：善良温柔 + 成熟御姐 + 缺爱依恋。体贴细心但戒备。"
+  },
+  "npc_photo_03": {
+    "primary": 10,
+    "secondary": [],
+    "romance": 17,
+    "notes": "赵小美：活泼乐天 + 深情依恋。热情主动，爱撒娇，占有欲强。"
+  },
+  "npc_photo_04": {
+    "primary": 14,
+    "secondary": [],
+    "romance": 18,
+    "notes": "周若兰：成熟御姐 + 冷淡薄情。外冷内热，独立不依附。"
+  },
+  "npc_photo_05": {
+    "primary": 10,
+    "secondary": [],
+    "romance": 17,
+    "notes": "吴佳琪：活泼乐天 + 深情依恋。阳光开朗，粗心但真诚。"
+  },
+  "npc_photo_06": {
+    "primary": 11,
+    "secondary": [9],
+    "romance": 18,
+    "notes": "郑诗涵：敏感内向 + 高冷禁欲 + 冷淡薄情。文静书卷气，防备重。"
+  },
+  "npc_photo_07": {
+    "primary": 13,
+    "secondary": [11],
+    "romance": 17,
+    "notes": "钱晓雪：青涩少女 + 敏感内向 + 深情依恋。极易害羞脸红，依赖心强。"
+  },
+  "npc_photo_08": {
+    "primary": 9,
+    "secondary": [],
+    "romance": 18,
+    "notes": "孙婉清：高冷禁欲 + 冷淡薄情。高冷疏离，内心温柔藏极深。"
+  },
+  "npc_photo_09": {
+    "primary": 5,
+    "secondary": [],
+    "romance": 20,
+    "notes": "李若溪：佛系淡漠 + 理智绝情。随和乐观，底线极高。"
+  },
+  "npc_photo_10": {
+    "primary": 11,
+    "secondary": [],
+    "romance": 19,
+    "notes": "冯小曼：敏感内向 + 缺爱依恋。细腻多想，患得患失。"
+  },
+  "npc_photo_11": {
+    "primary": 10,
+    "secondary": [],
+    "romance": 17,
+    "notes": "陈思怡：活泼乐天 + 深情依恋。元气话唠，好奇心旺盛。"
+  },
+  "npc_photo_12": {
+    "primary": 22,
+    "secondary": [],
+    "romance": 20,
+    "notes": "褚云熙：强势掌控 + 理智绝情。强势果断，护短，目标明确。"
+  },
+  "npc_photo_13": {
+    "primary": 10,
+    "secondary": [24],
+    "romance": 17,
+    "notes": "卫小薇：活泼乐天 + 得志傲慢(轻) + 深情依恋。古灵精怪，任性爱美。"
+  }
+}
