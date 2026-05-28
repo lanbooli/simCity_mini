@@ -20,7 +20,7 @@ class AudioQueue {
     // Web Audio API
     this._audioCtx = null;
     this._scheduledEnd = 0;       // AudioContext time when last buffer finishes
-    this._activeSources = [];     // active BufferSourceNodes (for stop())
+    this._activeSources = [];     // active BufferSourceNodes for (stop())
 
     // Streaming coordination
     this._nextChunkIndex = 0;
@@ -30,6 +30,11 @@ class AudioQueue {
 
     // Feature detection
     this._useWebAudio = !!(window.AudioContext || window.webkitAudioContext);
+
+    // Multi-NPC queue: group chunks by npcId, play one NPC at a time
+    this._currentNpcId = null;    // whose audio is currently playing
+    this._npcQueues = {};         // npcId → { chunks: [], nextIndex: 0 }
+    this._npcPlayOrder = [];      // ordered list of npcIds waiting to play
   }
 
   get enabled() { return this._enabled; }
@@ -50,17 +55,31 @@ class AudioQueue {
     const chunkIndex = chunk.chunkIndex ?? chunk.chunk_index ?? 0;
     const text = chunk.text || '';
     const isLast = chunk.isLast ?? chunk.is_last ?? false;
+    const npcId = chunk.npcId || chunk.npc_id || 'unknown';
 
-    // Skip duplicate chunks
-    if (this._queue.some(c => c.chunkIndex === chunkIndex)) return;
-
-    this._queue.push({ ...chunk, audioUrl, chunkIndex, isLast });
-    this._queue.sort((a, b) => a.chunkIndex - b.chunkIndex);
-
-    const npcId = chunk.npcId || chunk.npc_id || '';
     if (text && audioUrl) {
       this._chunkMap.set(text.trim(), { url: audioUrl, npcId });
     }
+
+    // Set current NPC if none playing
+    if (!this._currentNpcId) {
+      this._currentNpcId = npcId;
+    }
+
+    // Route chunk to the right NPC queue
+    if (!this._npcQueues[npcId]) {
+      this._npcQueues[npcId] = { chunks: [], nextIndex: 0 };
+      if (npcId !== this._currentNpcId) {
+        this._npcPlayOrder.push(npcId);
+      }
+    }
+    const queue = this._npcQueues[npcId];
+
+    // Skip duplicate chunks within the same NPC
+    if (queue.chunks.some(c => c.chunkIndex === chunkIndex)) return;
+
+    queue.chunks.push({ ...chunk, audioUrl, chunkIndex, isLast });
+    queue.chunks.sort((a, b) => a.chunkIndex - b.chunkIndex);
 
     // Kick off playback loop on first chunk
     if (!this._playLoopRunning) {
@@ -99,6 +118,9 @@ class AudioQueue {
     this._nextChunkIndex = 0;
     this._scheduledEnd = 0;
     this._playLoopRunning = false;
+    this._currentNpcId = null;
+    this._npcQueues = {};
+    this._npcPlayOrder = [];
   }
 
   _stopCurrentPlayback() {
@@ -121,11 +143,17 @@ class AudioQueue {
     this._nextChunkIndex = 0;
     this._scheduledEnd = 0;
     this._playLoopRunning = false;
+    this._currentNpcId = null;
+    this._npcQueues = {};
+    this._npcPlayOrder = [];
   }
 
   clear() {
     this.stop();
     this._chunkMap.clear();
+    this._currentNpcId = null;
+    this._npcQueues = {};
+    this._npcPlayOrder = [];
   }
 
   // ── Web Audio API gapless playback ───────────────
@@ -187,15 +215,50 @@ class AudioQueue {
 
   _tryDeliverNext() {
     if (!this._resolveNext) return;
+    if (!this._currentNpcId) return;
 
-    const idx = this._queue.findIndex(c => c.chunkIndex === this._nextChunkIndex);
+    const queue = this._npcQueues[this._currentNpcId];
+    if (!queue) {
+      // Current NPC has no queue, move to next
+      this._moveToNextNpc();
+      return;
+    }
+
+    const idx = queue.chunks.findIndex(c => c.chunkIndex === queue.nextIndex);
     if (idx >= 0) {
       clearTimeout(this._waitTimer);
-      const chunk = this._queue.splice(idx, 1)[0];
-      this._nextChunkIndex = chunk.chunkIndex + 1;
+      const chunk = queue.chunks.splice(idx, 1)[0];
+      queue.nextIndex = chunk.chunkIndex + 1;
+
+      // If this was the last chunk for this NPC, schedule move to next
+      if (chunk.isLast) {
+        const ctx = this._audioCtx;
+        const delayMs = ctx ? Math.max(0, (this._scheduledEnd - ctx.currentTime) * 1000 + 300) : 500;
+        setTimeout(() => this._moveToNextNpc(), delayMs);
+      }
+
       const resolve = this._resolveNext;
       this._resolveNext = null;
       resolve(chunk);
+    }
+  }
+
+  _moveToNextNpc() {
+    // Clean up current NPC
+    delete this._npcQueues[this._currentNpcId];
+    this._currentNpcId = null;
+
+    // Pick next NPC from queue
+    if (this._npcPlayOrder.length > 0) {
+      this._currentNpcId = this._npcPlayOrder.shift();
+      this._tryDeliverNext();
+    } else {
+      // No more NPCs, let the loop end
+      if (this._resolveNext) {
+        const r = this._resolveNext;
+        this._resolveNext = null;
+        r(null);
+      }
     }
   }
 
@@ -242,21 +305,43 @@ class AudioQueue {
 
   _playFallbackNext() {
     if (!this._playing) return;
+    if (!this._currentNpcId) {
+      this._moveToNextNpc();
+      if (!this._currentNpcId) {
+        this._playing = false;
+        this._playLoopRunning = false;
+        if (this._onQueueComplete) this._onQueueComplete();
+        return;
+      }
+    }
 
-    const chunk = this._queue.shift();
-    if (!chunk) {
-      this._playing = false;
-      this._playLoopRunning = false;
-      if (this._onQueueComplete) this._onQueueComplete();
+    const queue = this._npcQueues[this._currentNpcId];
+    if (!queue || queue.chunks.length === 0) {
+      this._moveToNextNpc();
+      setTimeout(() => this._playFallbackNext(), 100);
       return;
     }
 
-    this._nextChunkIndex = chunk.chunkIndex + 1;
+    const chunk = queue.chunks.shift();
+    if (!chunk) {
+      this._moveToNextNpc();
+      setTimeout(() => this._playFallbackNext(), 100);
+      return;
+    }
 
     const audio = new Audio(chunk.audioUrl);
-    audio.onended = () => this._playFallbackNext();
-    audio.onerror = () => this._playFallbackNext();
-    audio.play().catch(() => this._playFallbackNext());
+    audio.onended = () => {
+      if (chunk.isLast) this._moveToNextNpc();
+      this._playFallbackNext();
+    };
+    audio.onerror = () => {
+      if (chunk.isLast) this._moveToNextNpc();
+      this._playFallbackNext();
+    };
+    audio.play().catch(() => {
+      if (chunk.isLast) this._moveToNextNpc();
+      this._playFallbackNext();
+    });
 
     if (this._onChunkPlayed) this._onChunkPlayed(chunk);
   }

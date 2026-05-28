@@ -385,7 +385,8 @@ class TTSGateway:
                             "total_chunks": total_sentences,
                             "audio_url": f"/assets/audio/{filename}",
                             "text": seg_text,
-                            "player_id": player_id,
+                            "npc_id": npc_id,
+                                "player_id": player_id,
                             "is_last": is_last,
                         }, ensure_ascii=False)
 
@@ -438,6 +439,7 @@ class TTSGateway:
                                 "total_chunks": total_sentences,
                                 "audio_url": f"/assets/audio/{filename}",
                                 "text": sentence,
+                                "npc_id": npc_id,
                                 "player_id": player_id,
                                 "is_last": is_last,
                             }, ensure_ascii=False)
@@ -506,7 +508,8 @@ class TTSGateway:
                         "total_chunks": len(sentences),
                         "audio_url": f"/assets/audio/{filename}",
                         "text": sentence,
-                        "player_id": player_id,
+                        "npc_id": npc_id,
+                                "player_id": player_id,
                         "is_last": is_last,
                     }, ensure_ascii=False)
 

@@ -443,6 +443,7 @@ class NpcProcess:
         decision = self.brain.decide(data, perception)
 
         if decision["action"] == "move" and decision["scene_id"]:
+            self._update_scene(decision["scene_id"])
             await self.broker.publish("npc_movement", {
                 "npc_id": self.npc_id,
                 "scene_id": decision["scene_id"],
@@ -564,6 +565,7 @@ class NpcProcess:
             else:
                 # Go home to sleep
                 logger.info(f"NPC {self.npc_data['name']}: crisis=energy, going home {home_id}")
+                self._update_scene(home_id)
                 await self.broker.publish("npc_movement", {
                     "npc_id": self.npc_id,
                     "scene_id": home_id,
@@ -617,6 +619,7 @@ class NpcProcess:
 
         target = random.choice(candidates)
         logger.info(f"NPC {self.npc_data['name']}: crisis={crisis}, moving to {target} for {needed}")
+        self._update_scene(target)
         await self.broker.publish("npc_movement", {
             "npc_id": self.npc_id,
             "scene_id": target,
@@ -1613,6 +1616,29 @@ class NpcProcess:
             "spouse": "配偶", "dislike": "讨厌的人", "enemy": "仇敌",
         }
         return mapping.get(rel_type, rel_type)
+
+    def _update_scene(self, new_scene_id: str):
+        """Update NPC's current scene in npc_data and local fields.
+        Must be called when the NPC moves to a new scene."""
+        if new_scene_id == self.npc_data.get("current_scene_id", ""):
+            return  # No change
+        old_scene = self.npc_data.get("current_scene_id", "")
+        self.npc_data["current_scene_id"] = new_scene_id
+        self.npc_data["current_scene_name"] = ""
+        # Look up scene name and type from DB
+        conn = get_connection()
+        try:
+            row = fetch_one(conn, "SELECT name, scene_type FROM scene WHERE id = ?", (new_scene_id,))
+            if row:
+                self._scene_name = row["name"]
+                self._scene_type = row.get("scene_type", "indoor")
+                self.npc_data["current_scene_name"] = row["name"]
+            else:
+                self._scene_name = "未知"
+                self._scene_type = "indoor"
+        finally:
+            conn.close()
+        logger.info(f"NPC {self.npc_data['name']}: moved from {old_scene} to {new_scene_id}")
 
     async def _publish_state(self):
         """Publish NPC state to Redis."""
