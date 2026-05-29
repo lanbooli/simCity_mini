@@ -153,7 +153,8 @@ class GameSession: ObservableObject {
                     if let m = dt["new_mood"] as? String { self?.npcMood = m }
                     self?.fetchNpcInfo()
                 case "tts_audio":
-                    if let u = dt["audio_url"] as? String { self?.playAudio(u) }
+                    // Audio handled by web frontend AudioQueue; pet skips to avoid double-play
+                    break
                 case "greeting":
                     if let c = dt["content"] as? String, let n = dt["npc_name"] as? String {
                         self?.npcBubble = "\(n): \(c)"; self?.playerBubble = ""; self?.showBubbles = true
@@ -166,6 +167,8 @@ class GameSession: ObservableObject {
     }
 
     func playAudio(_ u: String) {
+        // Stop any currently playing audio first
+        if let cur = player, cur.isPlaying { cur.stop() }
         var p = u; if u.hasPrefix("/assets/") { p = root+"/frontend"+u }
         guard FileManager.default.fileExists(atPath: p),
               let pl = try? AVAudioPlayer(contentsOf: URL(fileURLWithPath: p)) else { return }
