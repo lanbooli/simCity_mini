@@ -22,12 +22,12 @@ const PlayerSettings = {
 
     // Overlay click to close
     document.getElementById('playerSettingsOverlay')?.addEventListener('click', (e) => {
-      if (e.target === e.currentTarget) this.hide();
+      if (e.target === e.currentTarget && !this._saving) this.hide();
     });
 
     // Escape to close (only when not typing)
     document.addEventListener('keydown', (e) => {
-      if (e.key !== 'Escape' || !this._visible) return;
+      if (e.key !== 'Escape' || !this._visible || this._saving) return;
       const tag = document.activeElement?.tagName;
       if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
       this.hide();
@@ -42,6 +42,7 @@ const PlayerSettings = {
     const overlay = document.getElementById('playerSettingsOverlay');
     if (!overlay) return;
     this._visible = true;
+    this._openTime = Date.now();
     overlay.style.display = 'flex';
     this._switchTab('detail');
 
@@ -65,7 +66,11 @@ const PlayerSettings = {
   },
 
   hide() {
+    // Don't close if: saving, editing, or just opened (<500ms)
+    if (this._saving || this._currentTab === 'edit') return;
+    if (this._openTime && Date.now() - this._openTime < 500) return;
     this._visible = false;
+    this._openTime = 0;
     const overlay = document.getElementById('playerSettingsOverlay');
     if (overlay) overlay.style.display = 'none';
   },

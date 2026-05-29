@@ -28,11 +28,11 @@ def seed_data(conn):
         npc_templates = json.load(f)
 
     # ── Initial game state ────────────────────────
-    execute(c, "INSERT OR REPLACE INTO game_state(key, value) VALUES(?, ?)",
+    execute(c, "INSERT OR IGNORE INTO game_state(key, value) VALUES(?, ?)",
             ("game_time", jd({"day": config["game"]["start_day"],
                               "hour": config["game"]["start_hour"],
                               "minute": config["game"]["start_minute"]})))
-    execute(c, "INSERT OR REPLACE INTO game_state(key, value) VALUES(?, ?)",
+    execute(c, "INSERT OR IGNORE INTO game_state(key, value) VALUES(?, ?)",
             ("weather", jd({"type": config["weather"]["initial"]})))
 
     # ── Insert scenes ─────────────────────────────
@@ -69,7 +69,7 @@ def seed_data(conn):
     for t in npc_templates:
         attrs = jd(_npc_attrs.get(t["id"], {"stamina": 5, "speed": 5, "strength": 5}))
         home_id = _npc_homes.get(t["id"])
-        execute(c, """INSERT OR REPLACE INTO npc(id, name, birth_date, gender, appearance, clothing,
+        execute(c, """INSERT OR IGNORE INTO npc(id, name, birth_date, gender, appearance, clothing,
                       voice_type, career, personality, current_scene_id, home_scene_id, current_mood, current_activity, schedule, attributes)
                       VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (t["id"], t["name"], t["birth_date"], t["gender"],
@@ -80,17 +80,17 @@ def seed_data(conn):
         npc_ids.append(t["id"])
 
         # Scene-NPC association (public scene)
-        execute(c, """INSERT OR REPLACE INTO scene_npc(scene_id, npc_id, role) VALUES(?, ?, ?)""",
+        execute(c, """INSERT OR IGNORE INTO scene_npc(scene_id, npc_id, role) VALUES(?, ?, ?)""",
                 (t["default_scene"], t["id"], t.get("scene_role", "visitor")))
 
         # Scene-NPC association (home scene as resident)
         if home_id:
-            execute(c, """INSERT OR REPLACE INTO scene_npc(scene_id, npc_id, role) VALUES(?, ?, 'resident')""",
+            execute(c, """INSERT OR IGNORE INTO scene_npc(scene_id, npc_id, role) VALUES(?, ?, 'resident')""",
                     (home_id, t["id"]))
 
         # Goals
         for g in t.get("goals", []):
-            execute(c, """INSERT INTO goal(id, entity_id, entity_type, goal_type, description,
+            execute(c, """INSERT OR IGNORE INTO goal(id, entity_id, entity_type, goal_type, description,
                           priority, is_short_term, status)
                           VALUES(?, ?, 'npc', ?, ?, ?, ?, 'active')""",
                     (gen_id(), t["id"], g["goal_type"], g["description"],
@@ -198,17 +198,17 @@ def seed_data(conn):
     for home_id, residents in _home_configs:
         base = f"item_{home_id}"
         # Living room (shared)
-        _home_items.append((f"{base}_sofa", home_id, "沙发", "柔软的布艺沙发", "furniture", "rest", "客厅"))
-        _home_items.append((f"{base}_tv", home_id, "电视", "一台液晶电视", "electronics", "entertain", "客厅"))
-        _home_items.append((f"{base}_tea_table", home_id, "茶几", "木质茶几", "furniture", "decorate", "客厅"))
+        _home_items.append((f"{base}_sofa", home_id, None, "沙发", "柔软的布艺沙发", "furniture", "rest", "客厅"))
+        _home_items.append((f"{base}_tv", home_id, None, "电视", "一台液晶电视", "electronics", "entertain", "客厅"))
+        _home_items.append((f"{base}_tea_table", home_id, None, "茶几", "木质茶几", "furniture", "decorate", "客厅"))
         # Kitchen (shared)
-        _home_items.append((f"{base}_fridge", home_id, "冰箱", "储存食物的冰箱", "appliance", "eat", "厨房"))
-        _home_items.append((f"{base}_stove", home_id, "灶台", "做饭用的燃气灶台", "appliance", "cook", "厨房"))
-        _home_items.append((f"{base}_sink", home_id, "水槽", "厨房水槽，可以喝水洗漱", "fixture", "drink", "厨房"))
-        _home_items.append((f"{base}_dining_table", home_id, "餐桌", "吃饭用的餐桌", "furniture", "eat", "厨房"))
+        _home_items.append((f"{base}_fridge", home_id, None, "冰箱", "储存食物的冰箱", "appliance", "eat", "厨房"))
+        _home_items.append((f"{base}_stove", home_id, None, "灶台", "做饭用的燃气灶台", "appliance", "cook", "厨房"))
+        _home_items.append((f"{base}_sink", home_id, None, "水槽", "厨房水槽，可以喝水洗漱", "fixture", "drink", "厨房"))
+        _home_items.append((f"{base}_dining_table", home_id, None, "餐桌", "吃饭用的餐桌", "furniture", "eat", "厨房"))
         # Bathroom (shared)
-        _home_items.append((f"{base}_shower", home_id, "淋浴", "热水淋浴", "fixture", "wash", "浴室"))
-        _home_items.append((f"{base}_mirror", home_id, "镜子", "浴室镜子", "fixture", "decorate", "浴室"))
+        _home_items.append((f"{base}_shower", home_id, None, "淋浴", "热水淋浴", "fixture", "wash", "浴室"))
+        _home_items.append((f"{base}_mirror", home_id, None, "镜子", "浴室镜子", "fixture", "decorate", "浴室"))
         # Bedrooms (private per resident)
         for resident_id in residents:
             if home_id == "home_player":
@@ -230,7 +230,7 @@ def seed_data(conn):
 
     # ── Insert a default player ───────────────────
     player_id = "player_001"
-    execute(c, """INSERT OR REPLACE INTO player(id, name, birth_date, gender, appearance, personality, career, current_scene_id, home_scene_id, attributes)
+    execute(c, """INSERT OR IGNORE INTO player(id, name, birth_date, gender, appearance, personality, career, current_scene_id, home_scene_id, attributes)
                   VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (player_id, "新居民", "2000-01-01", "other",
              jd({"height": "170cm", "build": "普通"}),
@@ -247,10 +247,19 @@ def seed_data(conn):
 
 
 def _insert_rel(conn, a_id, a_type, b_id, b_type, rel_type, fav, fam, count):
-    execute(conn, """INSERT OR REPLACE INTO relationship(id, entity_a_id, entity_a_type, entity_b_id, entity_b_type,
+    # Use deterministic ID so re-running doesn't create duplicates
+    rel_id = f"rel_{a_id}_{b_id}"
+    existing = conn.execute(
+        "SELECT favorability, familiarity, interaction_count FROM relationship WHERE id = ?",
+        (rel_id,)
+    ).fetchone()
+    if existing:
+        # Don't overwrite existing progress — only insert if missing
+        return
+    execute(conn, """INSERT OR IGNORE INTO relationship(id, entity_a_id, entity_a_type, entity_b_id, entity_b_type,
                       relationship_type, favorability, familiarity, interaction_count)
                       VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (gen_id(), a_id, a_type, b_id, b_type, rel_type, fav, fam, count))
+            (rel_id, a_id, a_type, b_id, b_type, rel_type, fav, fam, count))
 
 
 if __name__ == "__main__":

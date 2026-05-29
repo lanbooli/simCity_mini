@@ -48,8 +48,8 @@ class Settings(BaseSettings):
     # TTS Gateway
     tts_enabled: bool = True
     tts_python_path: str = "/Users/lanboo/lanbooassistent/mlx_audio/bin/python"
-    tts_model_path: str = "mlx-community/Qwen3-TTS-12Hz-1.7B-Base-bf16"
-    tts_narrator_model_path: str = "mlx-community/Qwen3-TTS-12Hz-1.7B-VoiceDesign-bf16"
+    tts_model_path: str = "/Users/lanboo/.cache/huggingface/hub/models--mlx-community--Qwen3-TTS-12Hz-1.7B-Base-bf16/snapshots/a6eb4f68e4b056f1215157bb696209bc82a6db48"
+    tts_narrator_model_path: str = "/Users/lanboo/.cache/huggingface/hub/models--mlx-community--Qwen3-TTS-12Hz-1.7B-VoiceDesign-bf16/snapshots/7d3824abff87e49756bb0f83fb5411de75d160c4"
     tts_narrator_instruct: str = "标准女声，吐字清晰，语调自然，播音员风格"
     tts_voice_refs_dir: str = "frontend/assets/voices"
     tts_audio_dir: str = "frontend/assets/audio"

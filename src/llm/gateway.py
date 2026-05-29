@@ -353,7 +353,7 @@ class Gateway:
         for t in getattr(self, '_tasks', []):
             t.cancel()
         if self._redis:
-            await self._redis.close()
+            await self._redis.aclose()
             self._redis = None
         logger.info(f"Gateway stopped. Stats: processed={self._stats['processed']}, "
                      f"errors={self._stats['errors']}, stale={self._stats['stale']}, "

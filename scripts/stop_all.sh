@@ -8,6 +8,9 @@ cd "$PROJECT_DIR"
 
 echo "Stopping 城市小镇 services..."
 
+# Stop desktop pet
+pkill -f "desktop_pet/pet_app.py" 2>/dev/null && echo "  Desktop pet stopped." || true
+
 # Send SIGTERM to any running game processes
 pkill -f "src.system.process" 2>/dev/null && echo "  System process stopped." || true
 pkill -f "src.npc.process" 2>/dev/null && echo "  NPC processes stopped." || true

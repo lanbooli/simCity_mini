@@ -84,19 +84,18 @@ class Perception:
         player_state = await self.broker.kv_get("state:player:player_001:location")
         if player_state and isinstance(player_state, dict):
             if player_state.get("scene_id") == scene_id:
-                # Cache player name from DB (avoid hardcoding "玩家")
-                if not self._player_name_cache:
+                # Read player name from DB fresh each time (user may have changed it)
+                try:
+                    from src.common.database import get_connection, fetch_one
+                    _conn = get_connection()
                     try:
-                        from src.common.database import get_connection, fetch_one
-                        _conn = get_connection()
-                        try:
-                            _row = fetch_one(_conn, "SELECT name FROM player WHERE id = 'player_001'")
-                            if _row and _row.get("name"):
-                                self._player_name_cache = _row["name"]
-                        finally:
-                            _conn.close()
-                    except Exception:
-                        self._player_name_cache = "玩家"
+                        _row = fetch_one(_conn, "SELECT name FROM player WHERE id = 'player_001'")
+                        if _row and _row.get("name"):
+                            self._player_name_cache = _row["name"]
+                    finally:
+                        _conn.close()
+                except Exception:
+                    pass
                 _player_name = self._player_name_cache or "玩家" 
                 data.players_present.append(PerceivedEntity(
                     id="player_001",

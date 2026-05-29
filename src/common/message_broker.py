@@ -84,7 +84,7 @@ class RedisBroker(MessageBroker):
             await self._pubsub.close()
             self._pubsub = None
         if self._redis:
-            await self._redis.close()
+            await self._redis.aclose()
             self._redis = None
 
     async def _ensure_connected(self):

@@ -57,11 +57,15 @@ const App = {
   // ── View Switching ──────────────────────────────
 
   showMain() {
-    // Hide all sub-views
+    // Hide sub-views but keep player settings if user is editing
     document.getElementById('galDialogueOverlay').style.display = 'none';
     document.getElementById('socialView').style.display = 'none';
     document.getElementById('characterView').style.display = 'none';
-    document.getElementById('playerSettingsOverlay').style.display = 'none';
+    // Only hide player settings if it's not currently open (user might be editing)
+    var psOverlay = document.getElementById('playerSettingsOverlay');
+    if (psOverlay && psOverlay.style.display !== 'flex') {
+      psOverlay.style.display = 'none';
+    }
     // Show main
     document.getElementById('mainView').style.display = 'flex';
     this._currentView = 'main';

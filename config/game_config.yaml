@@ -1,44 +1,35 @@
-# 城市小镇 - 游戏配置
-# 场景、天气、时间等基础设定
-
 game:
-  name: "城市小镇"
+  name: 城市小镇
   start_day: 1
   start_hour: 8
   start_minute: 0
-  game_speed_multiplier: 120  # 1真秒=120游戏秒=2游戏分钟
-
-# 天气系统
+  game_speed_multiplier: 120
 weather:
-  initial: "sunny"
+  initial: sunny
   transition_weights:
     sunny_to_cloudy: 0.15
-    cloudy_to_rainy: 0.20
+    cloudy_to_rainy: 0.2
     cloudy_to_sunny: 0.25
-    rainy_to_stormy: 0.10
-    rainy_to_cloudy: 0.30
-    stormy_to_rainy: 0.40
+    rainy_to_stormy: 0.1
+    rainy_to_cloudy: 0.3
+    stormy_to_rainy: 0.4
     snowy_to_cloudy: 0.25
     cloudy_to_snowy: 0.05
-
-# ── 亲密舒适度参数 ──
 intimacy_comfort:
   growth_per_hour_same_scene: 1
   growth_personality_extrovert: 1.5
   decay_per_day_absent: 2
   decay_witness_intimacy: 5
-
-# ── 恋爱系统参数 ──
 romance:
   love_eligible:
     favorability_min: 80
     intimacy_comfort_min: 70
     familiarity_min: 35
   confession_acceptance:
-    base_rate: 0.60
-    fav_85_plus: 0.40
-    comfort_80_plus: 0.30
-    personality_romantic: 0.20
+    base_rate: 0.6
+    fav_85_plus: 0.4
+    comfort_80_plus: 0.3
+    personality_romantic: 0.2
     personality_shy: -0.15
   npc_confession_probability:
     base_per_tick: 0.05
@@ -50,8 +41,6 @@ romance:
     intimacy_comfort_min: 90
     familiarity_min: 60
     min_ticks_as_lovers: 1440
-
-# ── 越界行为参数 ──
 boundary_violation:
   violation_threshold: 3
   relation_levels:
@@ -95,8 +84,6 @@ boundary_violation:
   counter_attack:
     enabled: true
     attribute_diff_for_npc_win: 2
-
-# ── 朋友圈参数 ──
 social_feed:
   post_probability_base: 0.03
   post_cooldown_ticks: 480
@@ -108,210 +95,395 @@ social_feed:
   npc_comment_acquaintance_prob: 0.2
   player_like_daily_cap: 3
   post_retention_game_days: 7
-
-# 场景定义
 scenes:
-  - id: "scene_coffee_shop"
-    name: "阳光咖啡店"
-    description: "一家温馨的街角咖啡店，飘着咖啡豆的香气，阳光透过落地窗洒在木质地板上。"
-    scene_type: "cafe"
-    weather_affected: false
-    max_capacity: 15
-    icon: "☕"
-
-  - id: "scene_park"
-    name: "中心公园"
-    description: "小镇中心的公园，绿树成荫，有一个小湖和几条长椅，是居民休闲的好去处。"
-    scene_type: "outdoor"
-    weather_affected: true
-    max_capacity: 50
-    icon: "🌳"
-
-  - id: "scene_school"
-    name: "小镇高中"
-    description: "镇上唯一的高中，有教学楼、操场和图书馆。年轻的学生们在这里度过他们的校园时光。"
-    scene_type: "school"
-    weather_affected: false
-    max_capacity: 100
-    icon: "🏫"
-
-  - id: "scene_library"
-    name: "公共图书馆"
-    description: "安静祥和的图书馆，书架间弥漫着旧书的味道，是学习和阅读的理想场所。"
-    scene_type: "library"
-    weather_affected: false
-    max_capacity: 30
-    icon: "📚"
-
-  - id: "scene_market"
-    name: "便民超市"
-    description: "街角的便民超市，货架上摆满了日常用品和新鲜食材，老板娘总是热情地招呼顾客。"
-    scene_type: "market"
-    weather_affected: false
-    max_capacity: 20
-    icon: "🏪"
-
-
-  - id: "scene_restaurant"
-    name: "小镇餐厅"
-    description: "一家温暖的家庭餐厅，木质的桌椅和暖黄的灯光，供应可口的家常菜。"
-    scene_type: "restaurant"
-    weather_affected: false
-    max_capacity: 30
-    icon: "🍽️"
-
-  - id: "scene_bar"
-    name: "夜色酒吧"
-    description: "小镇夜晚的热闹去处，昏暗的灯光下人们喝酒聊天，偶尔有驻唱歌手。"
-    scene_type: "bar"
-    weather_affected: false
-    max_capacity: 25
-    icon: "🍺"
-
-  - id: "scene_gym"
-    name: "健身中心"
-    description: "明亮的健身房，各种器械一应俱全，墙上贴着激励标语。"
-    scene_type: "gym"
-    weather_affected: false
-    max_capacity: 20
-    icon: "💪"
-
-  - id: "scene_cinema"
-    name: "小镇影院"
-    description: "小镇唯一的电影院，不大但很温馨，门口总是贴着最新电影的海报。"
-    scene_type: "cinema"
-    weather_affected: false
-    max_capacity: 40
-    icon: "🎬"
-
-  - id: "scene_clothing"
-    name: "服装店"
-    description: "一家精致的服装店，橱窗里展示着当季新款，老板娘品味不错。"
-    scene_type: "shop"
-    weather_affected: false
-    max_capacity: 15
-    icon: "👗"
-
-  - id: "scene_station"
-    name: "小镇车站"
-    description: "小镇的公交车站，遮阳棚下有几张长椅，是居民日常通勤的必经之地。"
-    scene_type: "outdoor"
-    weather_affected: true
-    max_capacity: 30
-    icon: "🚉"
-
-  - id: "scene_riverside"
-    name: "河边步道"
-    description: "沿着小河蜿蜒的步道，柳树依依，河里偶尔能看到鸭子游过。"
-    scene_type: "outdoor"
-    weather_affected: true
-    max_capacity: 25
-    icon: "🌊"
-
-  - id: "scene_office"
-    name: "镇政府"
-    description: "一栋两层的政府办公楼，办理各种事务，工作人员忙碌而有序。"
-    scene_type: "office"
-    weather_affected: false
-    max_capacity: 30
-    icon: "🏛️"
-
-  - id: "scene_arcade"
-    name: "游戏厅"
-    description: "充满霓虹灯和街机音效的游戏厅，投篮机和抓娃娃机前总有人在排队。"
-    scene_type: "arcade"
-    weather_affected: false
-    max_capacity: 20
-    icon: "🎮"
-
-  - id: "scene_hospital"
-    name: "小镇医院"
-    description: "小镇的综合医院，虽然不大但设备齐全。"
-    scene_type: "hospital"
-    weather_affected: false
-    max_capacity: 50
-    icon: "🏥"
-  # ── Home Scenes (Phase 11) ──────────────────────────
-  - id: "apt_a"
-    name: "阳光公寓A栋"
-    description: "一栋四层的老式公寓楼，外墙刷着温暖的米黄色。"
-    scene_type: "home"
-    weather_affected: false
-    max_capacity: 10
-    icon: "🏢"
-    residents: ["npc_li_ming", "npc_photo_01", "npc_photo_07", "npc_photo_09"]
-    rooms:
-      - {name: "客厅", icon: "🛋️", access: "public", description: "温馨的公共客厅，有柔软的布艺沙发和茶几"}
-      - {name: "厨房", icon: "🍳", access: "public", description: "干净的小厨房，冰箱里塞满了食材"}
-      - {name: "浴室", icon: "🚿", access: "public", description: "整洁的共用浴室"}
-      - {name: "李明卧室", icon: "🛏️", access: "private", owner: "npc_li_ming", description: "整洁简朴的房间，床头放着咖啡相关的书籍"}
-      - {name: "苏晓萌卧室", icon: "🛏️", access: "private", owner: "npc_photo_01", description: "粉白色系的可爱房间，到处是毛绒玩具"}
-      - {name: "钱晓雪卧室", icon: "🛏️", access: "private", owner: "npc_photo_07", description: "充满二次元海报的房间，书桌上摆着手办"}
-      - {name: "李若溪卧室", icon: "🛏️", access: "private", owner: "npc_photo_09", description: "极简风格的房间，几盆绿植是唯一的装饰"}
-
-  - id: "apt_b"
-    name: "阳光公寓B栋"
-    description: "靠近学校的公寓楼，很多学生在这里合租。"
-    scene_type: "home"
-    weather_affected: false
-    max_capacity: 10
-    icon: "🏢"
-    residents: ["npc_wang_fang", "npc_photo_02", "npc_photo_06", "npc_photo_10"]
-    rooms:
-      - {name: "客厅", icon: "🛋️", access: "public", description: "充满活力的公共客厅，墙上贴着课程表和趣味便签"}
-      - {name: "厨房", icon: "🍳", access: "public", description: "小厨房里经常飘出泡面和速食的香味"}
-      - {name: "浴室", icon: "🚿", access: "public", description: "总是排着队的共用浴室"}
-      - {name: "王芳卧室", icon: "🛏️", access: "private", owner: "npc_wang_fang", description: "热闹的小房间，桌上堆满了零食和八卦杂志"}
-      - {name: "林雨桐卧室", icon: "🛏️", access: "private", owner: "npc_photo_02", description: "干净整洁的房间，书桌上整齐摆放着学习资料"}
-      - {name: "郑诗涵卧室", icon: "🛏️", access: "private", owner: "npc_photo_06", description: "古典风格的小书房式卧室，书架上摆满线装书"}
-      - {name: "冯小曼卧室", icon: "🛏️", access: "private", owner: "npc_photo_10", description: "画架和颜料散落各处，充满艺术气息的房间"}
-
-  - id: "apt_c"
-    name: "阳光公寓C栋"
-    description: "现代风格的公寓楼，住户多是年轻人。"
-    scene_type: "home"
-    weather_affected: false
-    max_capacity: 10
-    icon: "🏢"
-    residents: ["npc_zhang_wei", "npc_photo_03", "npc_photo_05", "npc_photo_11", "npc_photo_12"]
-    rooms:
-      - {name: "客厅", icon: "🛋️", access: "public", description: "宽敞的客厅配有大电视和游戏机"}
-      - {name: "厨房", icon: "🍳", access: "public", description: "开放式厨房，冰箱上贴满了外卖菜单"}
-      - {name: "浴室", icon: "🚿", access: "public", description: "现代简约风格的浴室"}
-      - {name: "张伟卧室", icon: "🛏️", access: "private", owner: "npc_zhang_wei", description: "墙上挂着健身海报，角落放着哑铃的运动风房间"}
-      - {name: "赵小美卧室", icon: "🛏️", access: "private", owner: "npc_photo_03", description: "温馨可爱的房间，床头摆满了各种小饰品"}
-      - {name: "吴佳琪卧室", icon: "🛏️", access: "private", owner: "npc_photo_05", description: "阳光充沛的房间，墙上贴着马拉松号码牌"}
-      - {name: "陈思怡卧室", icon: "🛏️", access: "private", owner: "npc_photo_11", description: "堆满各种新奇小玩意的房间，像个探险家的收藏室"}
-      - {name: "褚云熙卧室", icon: "🛏️", access: "private", owner: "npc_photo_12", description: "简洁干练的房间，桌上放着日程计划和目标清单"}
-
-  - id: "apt_d"
-    name: "阳光公寓D栋"
-    description: "安静的公寓楼，住户都喜欢清静。"
-    scene_type: "home"
-    weather_affected: false
-    max_capacity: 10
-    icon: "🏢"
-    residents: ["npc_chen_xue", "npc_liu_jie", "npc_photo_04", "npc_photo_08", "npc_photo_13"]
-    rooms:
-      - {name: "客厅", icon: "🛋️", access: "public", description: "安静的客厅，茶几上常放着一壶花茶"}
-      - {name: "厨房", icon: "🍳", access: "public", description: "整洁的厨房，调味料摆放得整整齐齐"}
-      - {name: "浴室", icon: "🚿", access: "public", description: "干净宽敞的浴室，有浴缸"}
-      - {name: "陈雪卧室", icon: "🛏️", access: "private", owner: "npc_chen_xue", description: "堆满书的房间，窗台上养着几盆多肉植物"}
-      - {name: "刘姐卧室", icon: "🛏️", access: "private", owner: "npc_liu_jie", description: "实用主义的房间，衣柜里塞满了各种生活用品"}
-      - {name: "周若兰卧室", icon: "🛏️", access: "private", owner: "npc_photo_04", description: "精致品味的房间，梳妆台上整齐排列着护肤品"}
-      - {name: "孙婉清卧室", icon: "🛏️", access: "private", owner: "npc_photo_08", description: "清冷色调的房间，一尘不染，物品极少但都精致"}
-      - {name: "卫小薇卧室", icon: "🛏️", access: "private", owner: "npc_photo_13", description: "堆满时尚杂志和漂亮衣服的房间，有一面大镜子"}
-
-  - id: "home_player"
-    name: "我的公寓"
-    description: "一间温馨的单身公寓，不大但五脏俱全，是你在小镇的避风港。"
-    scene_type: "home"
-    weather_affected: false
-    max_capacity: 5
-    icon: "🏠"
-    residents: ["player_001"]
-    rooms:
-      - {name: "客厅", icon: "🛋️", access: "public", description: "小客厅里有柔软的沙发和电视"}
-      - {name: "厨房", icon: "🍳", access: "public", description: "开放式小厨房，想做什么都可以"}
-      - {name: "浴室", icon: "🚿", access: "public", description: "干净的私人浴室"}
-      - {name: "卧室", icon: "🛏️", access: "private", owner: "player_001", description: "舒适的卧室，有柔软的大床"}
+- id: scene_coffee_shop
+  name: 阳光咖啡店
+  description: 一家温馨的街角咖啡店，飘着咖啡豆的香气，阳光透过落地窗洒在木质地板上。
+  scene_type: cafe
+  weather_affected: false
+  max_capacity: 15
+  icon: ☕
+  rooms:
+  - 大厅
+  - 吧台
+  - 露台
+- id: scene_park
+  name: 中心公园
+  description: 小镇中心的公园，绿树成荫，有一个小湖和几条长椅，是居民休闲的好去处。
+  scene_type: outdoor
+  weather_affected: true
+  max_capacity: 50
+  icon: 🌳
+  rooms:
+  - 湖边
+  - 凉亭
+  - 草坪
+  - 健身区
+- id: scene_school
+  name: 小镇高中
+  description: 镇上唯一的高中，有教学楼、操场和图书馆。年轻的学生们在这里度过他们的校园时光。
+  scene_type: school
+  weather_affected: false
+  max_capacity: 100
+  icon: 🏫
+  rooms:
+  - 教室
+  - 操场
+  - 食堂
+  - 图书馆
+- id: scene_library
+  name: 公共图书馆
+  description: 安静祥和的图书馆，书架间弥漫着旧书的味道，是学习和阅读的理想场所。
+  scene_type: library
+  weather_affected: false
+  max_capacity: 30
+  icon: 📚
+  rooms:
+  - 阅览室
+  - 书架区
+  - 自习室
+- id: scene_market
+  name: 便民超市
+  description: 街角的便民超市，货架上摆满了日常用品和新鲜食材，老板娘总是热情地招呼顾客。
+  scene_type: market
+  weather_affected: false
+  max_capacity: 20
+  icon: 🏪
+  rooms:
+  - 食品区
+  - 日用品区
+  - 收银台
+- id: scene_restaurant
+  name: 小镇餐厅
+  description: 一家温暖的家庭餐厅，木质的桌椅和暖黄的灯光，供应可口的家常菜。
+  scene_type: restaurant
+  weather_affected: false
+  max_capacity: 30
+  icon: 🍽️
+  rooms:
+  - 大厅
+  - 厨房
+  - 吧台
+  - 包间
+- id: scene_bar
+  name: 夜色酒吧
+  description: 小镇夜晚的热闹去处，昏暗的灯光下人们喝酒聊天，偶尔有驻唱歌手。
+  scene_type: bar
+  weather_affected: false
+  max_capacity: 25
+  icon: 🍺
+  rooms:
+  - 吧台区
+  - 卡座区
+  - 舞池
+- id: scene_gym
+  name: 健身中心
+  description: 明亮的健身房，各种器械一应俱全，墙上贴着激励标语。
+  scene_type: gym
+  weather_affected: false
+  max_capacity: 20
+  icon: 💪
+  rooms:
+  - 器械区
+  - 有氧区
+  - 更衣室
+  - 淋浴间
+- id: scene_cinema
+  name: 小镇影院
+  description: 小镇唯一的电影院，不大但很温馨，门口总是贴着最新电影的海报。
+  scene_type: cinema
+  weather_affected: false
+  max_capacity: 40
+  icon: 🎬
+  rooms:
+  - 放映厅
+  - 大厅
+  - 零食柜台
+- id: scene_clothing
+  name: 服装店
+  description: 一家精致的服装店，橱窗里展示着当季新款，老板娘品味不错。
+  scene_type: shop
+  weather_affected: false
+  max_capacity: 15
+  icon: 👗
+  rooms:
+  - 女装区
+  - 男装区
+  - 试衣间
+  - 收银台
+- id: scene_station
+  name: 小镇车站
+  description: 小镇的公交车站，遮阳棚下有几张长椅，是居民日常通勤的必经之地。
+  scene_type: outdoor
+  weather_affected: true
+  max_capacity: 30
+  icon: 🚉
+  rooms:
+  - 候车大厅
+  - 站台
+  - 售票处
+- id: scene_riverside
+  name: 河边步道
+  description: 沿着小河蜿蜒的步道，柳树依依，河里偶尔能看到鸭子游过。
+  scene_type: outdoor
+  weather_affected: true
+  max_capacity: 25
+  icon: 🌊
+  rooms:
+  - 步道
+  - 观景台
+  - 凉亭
+- id: scene_office
+  name: 镇政府
+  description: 一栋两层的政府办公楼，办理各种事务，工作人员忙碌而有序。
+  scene_type: office
+  weather_affected: false
+  max_capacity: 30
+  icon: 🏛️
+  rooms:
+  - 办事大厅
+  - 办公室
+  - 会议室
+  - 休息区
+- id: scene_arcade
+  name: 游戏厅
+  description: 充满霓虹灯和街机音效的游戏厅，投篮机和抓娃娃机前总有人在排队。
+  scene_type: arcade
+  weather_affected: false
+  max_capacity: 20
+  icon: 🎮
+  rooms:
+  - 游戏区
+  - 休息区
+  - 兑奖处
+- id: scene_hospital
+  name: 小镇医院
+  description: 小镇的综合医院，虽然不大但设备齐全。
+  scene_type: hospital
+  weather_affected: false
+  max_capacity: 50
+  icon: 🏥
+  rooms:
+  - 门诊大厅
+  - 急诊室
+  - 病房区
+  - 药房
+- id: apt_a
+  name: 阳光公寓A栋
+  description: 一栋四层的老式公寓楼，外墙刷着温暖的米黄色。
+  scene_type: home
+  weather_affected: false
+  max_capacity: 10
+  icon: 🏢
+  residents:
+  - npc_li_ming
+  - npc_photo_01
+  - npc_photo_07
+  - npc_photo_09
+  rooms:
+  - name: 客厅
+    icon: 🛋️
+    access: public
+    description: 温馨的公共客厅，有柔软的布艺沙发和茶几
+  - name: 厨房
+    icon: 🍳
+    access: public
+    description: 干净的小厨房，冰箱里塞满了食材
+  - name: 浴室
+    icon: 🚿
+    access: public
+    description: 整洁的共用浴室
+  - name: 李明卧室
+    icon: 🛏️
+    access: private
+    owner: npc_li_ming
+    description: 整洁简朴的房间，床头放着咖啡相关的书籍
+  - name: 苏晓萌卧室
+    icon: 🛏️
+    access: private
+    owner: npc_photo_01
+    description: 粉白色系的可爱房间，到处是毛绒玩具
+  - name: 钱晓雪卧室
+    icon: 🛏️
+    access: private
+    owner: npc_photo_07
+    description: 充满二次元海报的房间，书桌上摆着手办
+  - name: 李若溪卧室
+    icon: 🛏️
+    access: private
+    owner: npc_photo_09
+    description: 极简风格的房间，几盆绿植是唯一的装饰
+- id: apt_b
+  name: 阳光公寓B栋
+  description: 靠近学校的公寓楼，很多学生在这里合租。
+  scene_type: home
+  weather_affected: false
+  max_capacity: 10
+  icon: 🏢
+  residents:
+  - npc_wang_fang
+  - npc_photo_02
+  - npc_photo_06
+  - npc_photo_10
+  rooms:
+  - name: 客厅
+    icon: 🛋️
+    access: public
+    description: 充满活力的公共客厅，墙上贴着课程表和趣味便签
+  - name: 厨房
+    icon: 🍳
+    access: public
+    description: 小厨房里经常飘出泡面和速食的香味
+  - name: 浴室
+    icon: 🚿
+    access: public
+    description: 总是排着队的共用浴室
+  - name: 王芳卧室
+    icon: 🛏️
+    access: private
+    owner: npc_wang_fang
+    description: 热闹的小房间，桌上堆满了零食和八卦杂志
+  - name: 林雨桐卧室
+    icon: 🛏️
+    access: private
+    owner: npc_photo_02
+    description: 干净整洁的房间，书桌上整齐摆放着学习资料
+  - name: 郑诗涵卧室
+    icon: 🛏️
+    access: private
+    owner: npc_photo_06
+    description: 古典风格的小书房式卧室，书架上摆满线装书
+  - name: 冯小曼卧室
+    icon: 🛏️
+    access: private
+    owner: npc_photo_10
+    description: 画架和颜料散落各处，充满艺术气息的房间
+- id: apt_c
+  name: 阳光公寓C栋
+  description: 现代风格的公寓楼，住户多是年轻人。
+  scene_type: home
+  weather_affected: false
+  max_capacity: 10
+  icon: 🏢
+  residents:
+  - npc_zhang_wei
+  - npc_photo_03
+  - npc_photo_05
+  - npc_photo_11
+  - npc_photo_12
+  rooms:
+  - name: 客厅
+    icon: 🛋️
+    access: public
+    description: 宽敞的客厅配有大电视和游戏机
+  - name: 厨房
+    icon: 🍳
+    access: public
+    description: 开放式厨房，冰箱上贴满了外卖菜单
+  - name: 浴室
+    icon: 🚿
+    access: public
+    description: 现代简约风格的浴室
+  - name: 张伟卧室
+    icon: 🛏️
+    access: private
+    owner: npc_zhang_wei
+    description: 墙上挂着健身海报，角落放着哑铃的运动风房间
+  - name: 赵小美卧室
+    icon: 🛏️
+    access: private
+    owner: npc_photo_03
+    description: 温馨可爱的房间，床头摆满了各种小饰品
+  - name: 吴佳琪卧室
+    icon: 🛏️
+    access: private
+    owner: npc_photo_05
+    description: 阳光充沛的房间，墙上贴着马拉松号码牌
+  - name: 陈思怡卧室
+    icon: 🛏️
+    access: private
+    owner: npc_photo_11
+    description: 堆满各种新奇小玩意的房间，像个探险家的收藏室
+  - name: 褚云熙卧室
+    icon: 🛏️
+    access: private
+    owner: npc_photo_12
+    description: 简洁干练的房间，桌上放着日程计划和目标清单
+- id: apt_d
+  name: 阳光公寓D栋
+  description: 安静的公寓楼，住户都喜欢清静。
+  scene_type: home
+  weather_affected: false
+  max_capacity: 10
+  icon: 🏢
+  residents:
+  - npc_chen_xue
+  - npc_liu_jie
+  - npc_photo_04
+  - npc_photo_08
+  - npc_photo_13
+  rooms:
+  - name: 客厅
+    icon: 🛋️
+    access: public
+    description: 安静的客厅，茶几上常放着一壶花茶
+  - name: 厨房
+    icon: 🍳
+    access: public
+    description: 整洁的厨房，调味料摆放得整整齐齐
+  - name: 浴室
+    icon: 🚿
+    access: public
+    description: 干净宽敞的浴室，有浴缸
+  - name: 陈雪卧室
+    icon: 🛏️
+    access: private
+    owner: npc_chen_xue
+    description: 堆满书的房间，窗台上养着几盆多肉植物
+  - name: 刘姐卧室
+    icon: 🛏️
+    access: private
+    owner: npc_liu_jie
+    description: 实用主义的房间，衣柜里塞满了各种生活用品
+  - name: 周若兰卧室
+    icon: 🛏️
+    access: private
+    owner: npc_photo_04
+    description: 精致品味的房间，梳妆台上整齐排列着护肤品
+  - name: 孙婉清卧室
+    icon: 🛏️
+    access: private
+    owner: npc_photo_08
+    description: 清冷色调的房间，一尘不染，物品极少但都精致
+  - name: 卫小薇卧室
+    icon: 🛏️
+    access: private
+    owner: npc_photo_13
+    description: 堆满时尚杂志和漂亮衣服的房间，有一面大镜子
+- id: home_player
+  name: 我的公寓
+  description: 一间温馨的单身公寓，不大但五脏俱全，是你在小镇的避风港。
+  scene_type: home
+  weather_affected: false
+  max_capacity: 5
+  icon: 🏠
+  residents:
+  - player_001
+  rooms:
+  - name: 客厅
+    icon: 🛋️
+    access: public
+    description: 小客厅里有柔软的沙发和电视
+  - name: 厨房
+    icon: 🍳
+    access: public
+    description: 开放式小厨房，想做什么都可以
+  - name: 浴室
+    icon: 🚿
+    access: public
+    description: 干净的私人浴室
+  - name: 卧室
+    icon: 🛏️
+    access: private
+    owner: player_001
+    description: 舒适的卧室，有柔软的大床

@@ -112,10 +112,14 @@ class TTSGateway:
         self._model = load_model(MODEL_PATH)
         logger.info(f"NPC model loaded. sample_rate={self._model.sample_rate}")
         
-        # VoiceDesign model: narrator voice (instruct-based)
-        logger.info(f"Loading narrator TTS model: {NARRATOR_MODEL_PATH}")
-        self._narrator_model = load_model(NARRATOR_MODEL_PATH)
-        logger.info(f"Narrator model loaded. sample_rate={self._narrator_model.sample_rate}")
+        # VoiceDesign model: narrator voice (instruct-based) - optional
+        try:
+            logger.info(f"Loading narrator TTS model: {NARRATOR_MODEL_PATH}")
+            self._narrator_model = load_model(NARRATOR_MODEL_PATH)
+            logger.info(f"Narrator model loaded. sample_rate={self._narrator_model.sample_rate}")
+        except Exception as e:
+            logger.warning(f"Narrator model failed to load: {e}. Using NPC model for narration.")
+            self._narrator_model = None
 
         # Load voice references
         self._load_voice_refs()
@@ -175,7 +179,7 @@ class TTSGateway:
                             pass
             except Exception:
                 pass
-            await self._redis.close()
+            await self._redis.aclose()
             self._redis = None
         self._model = None
         self._narrator_model = None
@@ -358,12 +362,13 @@ class TTSGateway:
                 
                 # Pick voice ref: narrator for stage, NPC for dialogue
                 if seg_type == "stage":
-                    # Use VoiceDesign model with instruct
+                    # Use VoiceDesign model with instruct; fallback to NPC model
+                    tts_model = self._narrator_model or self._model
                     try:
                         est_tokens = max(128, min(1024, len(seg_text) * 10))
                         audio_chunks = []
                         gen_start = time.monotonic()
-                        for result in self._narrator_model.generate(
+                        for result in tts_model.generate(
                             text=seg_text,
                             instruct=NARRATOR_INSTRUCT,
                             language="Chinese",

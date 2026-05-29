@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=340,initial-scale=1.0">
+<title>桌面小助手</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,PingFang SC,sans-serif;background:#1a1a2e;color:#e0e0ff;
+     height:100vh;display:flex;flex-direction:column;user-select:none}
+.titlebar{background:#16213e;padding:10px 14px;display:flex;justify-content:space-between;align-items:center;
+          -webkit-app-region:drag;cursor:move}
+.titlebar span{font-size:15px;font-weight:bold}
+#closeBtn{background:none;border:none;color:#888;font-size:18px;cursor:pointer;-webkit-app-region:no-drag}
+#closeBtn:hover{color:#ff4444}
+#npcSelect{background:#0f0f23;color:#e0e0ff;border:1px solid #333;border-radius:6px;
+            padding:8px 12px;margin:12px;font-size:14px}
+#bubble{background:#1e3a5f;color:#e0e0ff;border-radius:12px;padding:10px 14px;margin:0 12px 8px;
+        min-height:24px;font-size:13px;line-height:1.5;transition:opacity .3s}
+#avatarArea{text-align:center;flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center}
+#avatarImg{width:80px;height:80px;border-radius:50%;background:#2a2a4e;object-fit:cover;
+           display:flex;align-items:center;justify-content:center;font-size:36px}
+#npcName{font-size:16px;font-weight:bold;margin-top:8px}
+#npcMood{font-size:12px;color:#888;margin-top:4px}
+#inputArea{display:flex;padding:10px 12px;gap:8px;background:#16213e}
+#msgInput{flex:1;background:#0f0f23;color:#e0e0ff;border:1px solid #333;border-radius:8px;
+          padding:8px 12px;font-size:14px;outline:none}
+#msgInput:focus{border-color:#7c3aed}
+#sendBtn{background:#7c3aed;color:white;border:none;border-radius:8px;padding:8px 18px;
+         font-size:14px;cursor:pointer;white-space:nowrap}
+#sendBtn:active{background:#6d28d9}
+#status{text-align:center;font-size:11px;color:#666;padding:4px}
+</style>
+</head>
+<body>
+<div class="titlebar"><span>桌面小助手</span><button id="closeBtn" title="关闭">✕</button></div>
+<select id="npcSelect"><option value="">-- 选择角色 --</option></select>
+<div id="bubble" style="opacity:0"></div>
+<div id="avatarArea">
+  <div id="avatarImg">🌸</div>
+  <div id="npcName">选择角色</div>
+  <div id="mood"> </div>
+</div>
+<div id="status">● 等待连接...</div>
+<div id="inputArea">
+  <input id="msgInput" placeholder="输入消息..." disabled>
+  <button id="sendBtn" disabled>发送</button>
+</div>
+<script>
+const WS_URL = `ws://${location.host}/ws/game?player_id=player_001`;
+const API_BASE = `http://${location.host}`;
+let ws, currentNpc, npcs = {};
+let bubbleTimer;
+
+// 连接 WS
+function connect() {
+  ws = new WebSocket(WS_URL);
+  ws.onopen = () => {
+    document.getElementById('status').textContent = '● 已连接';
+    loadNpcs();
+  };
+  ws.onclose = () => {
+    document.getElementById('status').textContent = '● 已断开，3s后重连...';
+    setTimeout(connect, 3000);
+  };
+  ws.onmessage = (e) => {
+    const msg = JSON.parse(e.data);
+    if (msg.type === 'dialogue_response') {
+      const d = msg.data;
+      if (d.content) showBubble((d.npc_name||'') + ': ' + d.content);
+      if (d.new_mood) document.getElementById('mood').textContent = d.new_mood;
+      if (d.favorability_change && d.favorability_change != 0) {
+        setTimeout(() => showBubble('好感 ' + (d.favorability_change>0?'↑':'↓')+Math.abs(d.favorability_change)), 2000);
+      }
+    }
+    if (msg.type === 'greeting' && msg.data.content) {
+      showBubble('👋 '+(msg.data.npc_name||'')+': '+msg.data.content);
+    }
+  };
+}
+
+// 加载 NPC
+async function loadNpcs() {
+  try {
+    const res = await fetch(API_BASE+'/api/v1/npcs');
+    const data = await res.json();
+    const list = data.data || [];
+    const sel = document.getElementById('npcSelect');
+    list.forEach(n => {
+      npcs[n.id] = n;
+      const opt = document.createElement('option');
+      opt.value = n.id;
+      opt.textContent = n.name;
+      sel.appendChild(opt);
+    });
+    document.getElementById('status').textContent = '● 就绪 ('+list.length+'个角色)';
+  } catch(e) {
+    document.getElementById('status').textContent = '● 加载失败';
+  }
+}
+
+// 选择 NPC
+document.getElementById('npcSelect').onchange = function() {
+  const id = this.value;
+  if (!id || !npcs[id]) return;
+  currentNpc = id;
+  const n = npcs[id];
+  document.getElementById('npcName').textContent = n.name;
+  document.getElementById('mood').textContent = n.current_mood || '';
+  document.getElementById('msgInput').disabled = false;
+  document.getElementById('sendBtn').disabled = false;
+};
+
+// 发送
+function sendMsg() {
+  const input = document.getElementById('msgInput');
+  const text = input.value.trim();
+  if (!text || !currentNpc || !ws) return;
+  ws.send(JSON.stringify({type:'dialogue_send', data:{npc_id:currentNpc, content:text}}));
+  showBubble('你: '+text, true);
+  input.value = '';
+}
+document.getElementById('sendBtn').onclick = sendMsg;
+document.getElementById('msgInput').onkeydown = (e) => { if(e.key==='Enter') sendMsg(); };
+document.getElementById('closeBtn').onclick = () => window.close();
+
+// 气泡
+function showBubble(text, isMe) {
+  const b = document.getElementById('bubble');
+  b.textContent = text;
+  b.style.opacity = '1';
+  b.style.background = isMe ? '#7c3aed' : '#1e3a5f';
+  clearTimeout(bubbleTimer);
+  bubbleTimer = setTimeout(() => b.style.opacity = '0', 6000);
+}
+
+connect();
+</script>
+</body>
+</html>
