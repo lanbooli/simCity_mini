@@ -494,10 +494,15 @@ class NpcProcess:
             decision = self.brain.decide(data, perception)
 
         if decision["action"] == "move" and decision["scene_id"]:
-            self._update_scene(decision["scene_id"])
+            # For schedule-based moves, derive room from activity (e.g. "回家休息" → "客厅")
+            room_name = decision.get("room_name", "")
+            if not room_name and decision["scene_id"] == self._home_scene_id:
+                room_name = "客厅"  # Default room when going home
+            self._update_scene(decision["scene_id"], room_name)
             await self.broker.publish("npc_movement", {
                 "npc_id": self.npc_id,
                 "scene_id": decision["scene_id"],
+                "room_name": room_name,
                 "activity": decision["activity"],
                 "reason": decision["reason"],
             })
@@ -602,56 +607,56 @@ class NpcProcess:
         current_scene = self.npc_data.get("current_scene_id", "")
         home_id = self._home_scene_id
 
+        # Determine which room to move to based on crisis type
+        need_funcs = {"hunger": ["eat", "cook"], "thirst": ["drink"], "energy": ["sleep"]}
+        needed_funcs = need_funcs.get(crisis, ["drink"])
+
         # ── Energy crisis: prefer going home to sleep ──
         if crisis == "energy" and home_id:
+            bedroom = self._find_room_by_function(home_id, "sleep")
+            room_name = bedroom["name"] if bedroom else "卧室"
+            activity = f"在{room_name}床上睡觉"
+            self.npc_data["current_activity"] = activity
             if current_scene == home_id:
-                # Already home — use bed
-                bedroom = self._find_room_by_function(home_id, "sleep")
-                room_name = bedroom["name"] if bedroom else "卧室"
-                activity = f"在{room_name}床上睡觉"
-                self.npc_data["current_activity"] = activity
-                logger.info(f"NPC {self.npc_data['name']}: crisis=energy, already home, sleeping in {room_name}")
+                # Already home — set room and sleep
+                self._update_scene(home_id, room_name)
+                logger.info(f"NPC {self.npc_data['name']}: crisis=energy, sleeping in {room_name}")
                 await self._publish_state()
                 self.physiology.recover("energy", 70)
             else:
                 # Go home to sleep
-                logger.info(f"NPC {self.npc_data['name']}: crisis=energy, going home {home_id}")
-                self._update_scene(home_id)
+                logger.info(f"NPC {self.npc_data['name']}: crisis=energy, going home, room={room_name}")
+                self._update_scene(home_id, room_name)
                 await self.broker.publish("npc_movement", {
                     "npc_id": self.npc_id,
                     "scene_id": home_id,
-                    "activity": "回家睡觉",
+                    "room_name": room_name,
+                    "activity": activity,
                     "reason": "crisis_energy",
                 })
                 self.physiology.recover("energy", 70)
-            return  # Energy handled, no further fallback needed
+            return
 
         # ── Hunger / thirst at home: use kitchen items ──
         if crisis in ("hunger", "thirst") and home_id and current_scene == home_id:
-            if crisis == "hunger":
-                kitchen = self._find_room_by_function(home_id, "cook") or self._find_room_by_function(home_id, "eat")
-                room_name = kitchen["name"] if kitchen else "厨房"
-                activity = f"在{room_name}做饭"
-                self.npc_data["current_activity"] = activity
-                await self._publish_state()
+            is_hunger = crisis == "hunger"
+            kitchen = self._find_room_by_function(home_id, "cook") if is_hunger else self._find_room_by_function(home_id, "drink")
+            if is_hunger:
+                kitchen = kitchen or self._find_room_by_function(home_id, "eat")
+            room_name = kitchen["name"] if kitchen else "厨房"
+            activity = f"在{room_name}做饭" if is_hunger else f"在{room_name}喝水"
+            self.npc_data["current_activity"] = activity
+            self._update_scene(home_id, room_name)
+            logger.info(f"NPC {self.npc_data['name']}: crisis={crisis}, using {room_name}")
+            await self._publish_state()
+            if is_hunger:
                 self.physiology.recover("hunger", 60)
                 self.physiology.recover("thirst", 20)
-                logger.info(f"NPC {self.npc_data['name']}: crisis=hunger, cooking in {room_name}")
             else:
-                kitchen = self._find_room_by_function(home_id, "drink")
-                room_name = kitchen["name"] if kitchen else "厨房"
-                activity = f"在{room_name}喝水"
-                self.npc_data["current_activity"] = activity
-                await self._publish_state()
                 self.physiology.recover("thirst", 60)
-                logger.info(f"NPC {self.npc_data['name']}: crisis=thirst, drinking in {room_name}")
-            return  # Home handled, no further fallback needed
+            return
 
         # ── Fallback: find scene with items that satisfy the need ──
-        need_funcs = {"hunger": ["eat", "cook"], "thirst": ["drink"], "energy": ["sleep"]}
-        needed_funcs = need_funcs.get(crisis, ["drink"])
-
-        # Private funcs (sleep/wash) need owner filter; public funcs (eat/cook/drink) are shared
         private_funcs = ("sleep", "wash")
         candidates = []
         for sid in self._all_scene_ids:
@@ -660,7 +665,6 @@ class NpcProcess:
             conn = get_connection()
             try:
                 func_pattern = " OR ".join([f"function LIKE '%,{f},%' OR function LIKE '{f},%' OR function LIKE '%,{f}' OR function = '{f}'" for f in needed_funcs])
-                # For private functions (sleep/wash), filter by owner
                 is_private = any(f in private_funcs for f in needed_funcs)
                 if is_private:
                     row = fetch_one(conn,
@@ -684,12 +688,21 @@ class NpcProcess:
             return
 
         target = random.choice(candidates)
-        logger.info(f"NPC {self.npc_data['name']}: crisis={crisis}, moving to {target} for {needed_funcs}")
-        self._update_scene(target)
+        # Find the specific room for this crisis in the target scene
+        target_room = ""
+        for nf in needed_funcs:
+            found = self._find_room_by_function(target, nf)
+            if found:
+                target_room = found.get("name", "")
+                break
+        activity_text = f"在{target_room}解决需求" if target_room else f"解决{crisis}需求"
+        logger.info(f"NPC {self.npc_data['name']}: crisis={crisis}, moving to {target} room={target_room}")
+        self._update_scene(target, target_room)
         await self.broker.publish("npc_movement", {
             "npc_id": self.npc_id,
             "scene_id": target,
-            "activity": f"解决{crisis}需求",
+            "room_name": target_room,
+            "activity": activity_text,
             "reason": f"crisis_{crisis}",
         })
         if crisis == "hunger":
@@ -930,6 +943,7 @@ class NpcProcess:
         await self.broker.publish("npc_movement", {
             "npc_id": self.npc_id,
             "scene_id": target,
+            "room_name": "",
             "activity": "避开玩家",
             "reason": "avoiding_player",
         })
@@ -1725,12 +1739,16 @@ class NpcProcess:
             if target and target != current:
                 logger.info(f"NPC {self.npc_data['name']}: schedule catch-up: {current} → {target} "
                            f"(game time {hour:02d}:{minute:02d} Day {day})")
-                self._update_scene(target)
+                room_name = "客厅"
+                if target == self._home_scene_id:
+                    room_name = "客厅"
+                self._update_scene(target, room_name)
                 # Update scene_npc table and Redis scene lists
                 try:
                     await self.broker.publish("npc_movement", {
                         "npc_id": self.npc_id,
                         "scene_id": target,
+                        "room_name": room_name,
                         "activity": scheduled.get("activity", "闲逛"),
                         "reason": "schedule_catchup",
                     })
@@ -1738,14 +1756,16 @@ class NpcProcess:
                 except Exception:
                     pass
 
-    def _update_scene(self, new_scene_id: str):
-        """Update NPC's current scene in npc_data and local fields.
-        Must be called when the NPC moves to a new scene."""
-        if new_scene_id == self.npc_data.get("current_scene_id", ""):
-            return  # No change
+    def _update_scene(self, new_scene_id: str, room_name: str = ""):
+        """Update NPC's current scene and room in npc_data and local fields.
+        Must be called when the NPC moves to a new scene or room."""
         old_scene = self.npc_data.get("current_scene_id", "")
+        old_room = self.npc_data.get("current_room", "")
+        if new_scene_id == old_scene and room_name == old_room:
+            return  # No change
         self.npc_data["current_scene_id"] = new_scene_id
         self.npc_data["current_scene_name"] = ""
+        self.npc_data["current_room"] = room_name
         # Keep brain in sync so movement decisions use the correct scene
         if hasattr(self, "brain") and self.brain:
             self.brain._current_scene = new_scene_id
@@ -1763,7 +1783,10 @@ class NpcProcess:
                 self._scene_type = "indoor"
         finally:
             conn.close()
-        logger.info(f"NPC {self.npc_data['name']}: moved from {old_scene} to {new_scene_id}")
+        if room_name and room_name != old_room:
+            logger.info(f"NPC {self.npc_data['name']}: entered room '{room_name}' in {new_scene_id}")
+        elif new_scene_id != old_scene:
+            logger.info(f"NPC {self.npc_data['name']}: moved from {old_scene} to {new_scene_id}")
 
     def _persist_death(self):
         """Save NPC death state to database."""
@@ -1783,9 +1806,9 @@ class NpcProcess:
         current_scene_id = self.npc_data.get("current_scene_id", "")
         activity = self.npc_data.get("current_activity", "")
 
-        # Derive room context from current activity when at home
-        room_name = ""
-        if self._scene_type == "home" and activity:
+        # Use current_room from npc_data if set, otherwise derive from activity
+        room_name = self.npc_data.get("current_room", "") or ""
+        if not room_name and self._scene_type == "home" and activity:
             room_name = self._extract_room_from_activity(activity)
 
         state = {
