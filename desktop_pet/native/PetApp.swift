@@ -153,7 +153,7 @@ class GameSession: ObservableObject {
                     if let m = dt["new_mood"] as? String { self?.npcMood = m }
                     self?.fetchNpcInfo()
                 case "tts_audio":
-                    break  // audio handled by web AudioQueue
+                    if let u = dt["audio_url"] as? String { self?.playAudio(u) }
                 case "greeting":
                     if let c = dt["content"] as? String, let n = dt["npc_name"] as? String {
                         self?.npcBubble = "\(n): \(c)"; self?.playerBubble = ""; self?.showBubbles = true
