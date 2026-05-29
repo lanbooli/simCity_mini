@@ -92,34 +92,32 @@ class GameSession: ObservableObject {
             let hu = (phys["hunger"] as? Int) ?? 50
             let en = (phys["energy"] as? Int) ?? (attrs["energy"] as? Int) ?? 50
             
-            // 获取关系
-            var relText = ""
-            let relURL = "http://localhost:8000/api/v1/npc/\(selectedNpcId)/relationship/player_001"
-            if let ru = URL(string: relURL) {
-                let sem = DispatchSemaphore(value: 0)
-                let req = URLRequest(url: ru, timeoutInterval: 3)
-                URLSession.shared.dataTask(with: req) { [weak self] rd, _, _ in
-                    defer { sem.signal() }
-                    guard let rd = rd,
-                          let rj = try? JSONSerialization.jsonObject(with: rd) as? [String:Any],
-                          let rd2 = rj["data"] as? [String:Any] else { return }
-                    guard let self = self else { return }
-                    let rt = rd2["relationship_type"] as? String ?? ""
-                    let fav = rd2["favorability"] as? Int ?? 0
-                    let fam = rd2["familiarity"] as? Int ?? 0
-                    relText = "\n👥 \(relNames[rt] ?? rt) ❤️\(fav) 👋\(fam)"
-                }.resume()
-                sem.wait()
-            }
-            
-            DispatchQueue.main.async { [weak self] in
-                guard let self = self else { return }
+            // 立即设置基本信息（无需等待关系请求）
+            DispatchQueue.main.async {
                 var info = "📍 \(scName)"
                 if !loc.isEmpty { info += " · \(loc)" }
                 info += "\n💪体力:\(st) 🍖饱食:\(hu) ⚡精力:\(en)"
                 if let career = data["career"] as? String, !career.isEmpty { info += "\n💼 \(career)" }
-                info += relText
                 self.npcInfo = info
+            }
+            
+            // 异步获取关系信息（不阻塞）
+            let relURL = "http://localhost:8000/api/v1/npc/\(selectedNpcId)/relationship/player_001"
+            if let ru = URL(string: relURL) {
+                URLSession.shared.dataTask(with: ru) { [weak self] rd, _, _ in
+                    guard let self = self else { return }
+                    if let rd = rd,
+                       let rj = try? JSONSerialization.jsonObject(with: rd) as? [String:Any],
+                       let rd2 = rj["data"] as? [String:Any] {
+                        let rt = rd2["relationship_type"] as? String ?? ""
+                        let fav = rd2["favorability"] as? Int ?? 0
+                        let fam = rd2["familiarity"] as? Int ?? 0
+                        let relText = "\n👥 \(relNames[rt] ?? rt) ❤️\(fav) 👋\(fam)"
+                        DispatchQueue.main.async {
+                            self.npcInfo += relText
+                        }
+                    }
+                }.resume()
             }
         }.resume()
     }
