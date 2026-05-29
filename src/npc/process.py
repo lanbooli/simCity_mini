@@ -75,6 +75,7 @@ class NpcProcess:
         self._intimacy_engine: IntimacyEngine = None
         self._player_together_ticks: int = 0
         self._last_player_id: str = ""
+        self._tasks: list[asyncio.Task] = []
 
     async def start(self):
         logger.info(f"NPC process starting: {self.npc_id}")
@@ -86,6 +87,7 @@ class NpcProcess:
         # Initialize physiology
         self.physiology = PhysiologyManager(self.npc_data)
         self._load_npc_data()
+        await self._catch_up_schedule()
 
         logger.info(f"NPC {self.npc_data['name']} loaded. "
                      f"Scene: {self._scene_name}")
@@ -112,6 +114,8 @@ class NpcProcess:
             self.npc_data.get("current_scene_id", ""),
         )
         self.movement_mgr.set_available_scenes(self._all_scene_ids)
+        # Apply schedule retroactively: if game is past NPC's bedtime, move them home
+        # (handled later in start() after event loop is ready)
         self.memory_mgr = MemoryManager(self.npc_id)
         self.memory_mgr.load_recent()
         self.relationship_mgr = RelationshipManager(self.npc_id)
@@ -156,12 +160,12 @@ class NpcProcess:
         stream = f"stream:dialogue:{self.npc_id}"
         await self.broker.stream_create_group(stream, f"group_{self.npc_id}")
         # Start consuming dialogue stream in a background task
-        asyncio.create_task(self._dialogue_consumer(stream, f"group_{self.npc_id}"))
+        self._tasks.append(asyncio.create_task(self._dialogue_consumer(stream, f"group_{self.npc_id}")))
 
         # Social stream (NPC→NPC interactions)
         social_stream = f"stream:social:{self.npc_id}"
         await self.broker.stream_create_group(social_stream, f"group_social_{self.npc_id}")
-        asyncio.create_task(self._social_consumer(social_stream, f"group_social_{self.npc_id}"))
+        self._tasks.append(asyncio.create_task(self._social_consumer(social_stream, f"group_social_{self.npc_id}")))
 
         # Publish initial state
         await self._publish_state()
@@ -303,6 +307,16 @@ class NpcProcess:
         current_scene = self.npc_data.get("current_scene_id", "")
         if entered_scene_id != current_scene:
             return
+
+        # Cross-verify: check player's actual location from Redis
+        try:
+            player_loc = await self.broker.kv_get(f"state:player:{player_id}:location")
+            if player_loc and isinstance(player_loc, dict) and player_loc.get("scene_id") != current_scene:
+                logger.debug(f"NPC {self.npc_data['name']}: player {player_name} entered event says {entered_scene_id} "
+                           f"but Redis location says {player_loc.get('scene_id')}, skipping")
+                return
+        except Exception:
+            pass
 
         # Don't greet if in dialogue
         if self._in_dialogue_with:
@@ -461,6 +475,7 @@ class NpcProcess:
                 "activity": decision["activity"],
                 "reason": decision["reason"],
             })
+            await self._publish_state()
 
         elif decision.get("action") == "greet_player":
             await self._execute_player_greeting(perception)
@@ -1628,6 +1643,46 @@ class NpcProcess:
         }
         return mapping.get(rel_type, rel_type)
 
+    async def _catch_up_schedule(self):
+        """On startup, check current game time from DB and apply the most recent schedule entry.
+        This prevents NPCs from being stuck in daytime locations after a restart."""
+        if not self.movement_mgr:
+            return
+        # Read game time from DB
+        try:
+            from src.common.database import get_connection, fetch_one
+            import json
+            conn = get_connection()
+            try:
+                row = fetch_one(conn, "SELECT value FROM game_state WHERE key = 'game_time'")
+                gt = json.loads(row["value"]) if row else {}
+            finally:
+                conn.close()
+        except Exception:
+            gt = {}
+        hour = gt.get("hour", 8)
+        minute = gt.get("minute", 0)
+        day = gt.get("day", 1)
+        scheduled = self.movement_mgr.get_schedule_for_time(hour, minute, day)
+        if scheduled and scheduled.get("scene"):
+            target = scheduled["scene"]
+            current = self.npc_data.get("current_scene_id", "")
+            if target and target != current:
+                logger.info(f"NPC {self.npc_data['name']}: schedule catch-up: {current} → {target} "
+                           f"(game time {hour:02d}:{minute:02d} Day {day})")
+                self._update_scene(target)
+                # Update scene_npc table and Redis scene lists
+                try:
+                    await self.broker.publish("npc_movement", {
+                        "npc_id": self.npc_id,
+                        "scene_id": target,
+                        "activity": scheduled.get("activity", "闲逛"),
+                        "reason": "schedule_catchup",
+                    })
+                    await self._publish_state()
+                except Exception:
+                    pass
+
     def _update_scene(self, new_scene_id: str):
         """Update NPC's current scene in npc_data and local fields.
         Must be called when the NPC moves to a new scene."""
@@ -1636,6 +1691,10 @@ class NpcProcess:
         old_scene = self.npc_data.get("current_scene_id", "")
         self.npc_data["current_scene_id"] = new_scene_id
         self.npc_data["current_scene_name"] = ""
+        # Keep brain in sync so movement decisions use the correct scene
+        if hasattr(self, "brain") and self.brain:
+            self.brain._current_scene = new_scene_id
+            self.brain._greeted_player = False
         # Look up scene name and type from DB
         conn = get_connection()
         try:
@@ -1703,12 +1762,32 @@ class NpcProcess:
     async def run(self):
         """Main NPC loop."""
         await self.start()
+        _health_tick = 0
         while self._running:
             await asyncio.sleep(1.0)
+            _health_tick += 1
+            if _health_tick % 15 == 0:  # every 15 seconds
+                try:
+                    scene_id = self.npc_data.get("current_scene_id", "")
+                    await self.broker.report_health(
+                        f"npc:{self.npc_id}",
+                        status="alive",
+                        extra={
+                            "scene": scene_id,
+                            "dialogue": self._in_dialogue_with or "",
+                            "mood": self.npc_data.get("current_mood", "neutral"),
+                        },
+                    )
+                except Exception:
+                    pass
 
     async def shutdown(self):
         logger.info(f"NPC {self.npc_data.get('name', self.npc_id)} shutting down...")
         self._running = False
+        for task in self._tasks:
+            task.cancel()
+        if self._tasks:
+            await asyncio.wait(self._tasks, timeout=5)
         await self.broker.disconnect()
 
 

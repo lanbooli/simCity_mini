@@ -234,6 +234,9 @@ class Supervisor:
         self._running = True
         self._cmd_thread = threading.Thread(target=self._listen_admin_commands, daemon=True)
         self._cmd_thread.start()
+        # Start health monitor thread
+        self._health_thread = threading.Thread(target=self._health_monitor_loop, daemon=True)
+        self._health_thread.start()
         self._write_status_file()
 
     def stop(self):
@@ -273,6 +276,67 @@ class Supervisor:
             rc = proc.poll()
             status = "RUNNING" if rc is None else f"EXITED ({rc})"
             print(f"  [{name}] {status} (PID: {proc.pid})")
+
+    def _health_monitor_loop(self):
+        """Background thread: check process health via Redis, restart stale ones."""
+        HEALTH_TIMEOUT = 60  # seconds: if no health report within this time, consider hung
+        CHECK_INTERVAL = 20  # seconds between checks
+        
+        # Map process names used in health reports to supervisor child names
+        HEALTH_TO_CHILD = {
+            "system": "system",
+            "llm_gateway": "llm_gateway",
+            "tts": "tts_gateway",
+            "player:player_001": "player",
+        }
+        # NPCs: health key is "npc:{npc_id}", child name is npc_id
+        
+        while self._running:
+            time.sleep(CHECK_INTERVAL)
+            try:
+                import redis as _redis
+                r = _redis.from_url(getattr(settings, "redis_url", "redis://localhost:6379"))
+                
+                # Scan all health keys
+                keys = r.keys("health:*")
+                now = time.time()
+                
+                for key in keys:
+                    key_str = key.decode() if isinstance(key, bytes) else key
+                    name = key_str[len("health:"):]
+                    val = r.get(key)
+                    if not val:
+                        continue
+                    try:
+                        data = json.loads(val)
+                    except json.JSONDecodeError:
+                        continue
+                    
+                    ts = data.get("timestamp", 0)
+                    age = now - ts
+                    
+                    if age < HEALTH_TIMEOUT:
+                        continue  # healthy
+                    
+                    # Map health name to supervisor child name
+                    child_name = HEALTH_TO_CHILD.get(name, name)
+                    # For NPCs, health key is "npc:{npc_id}", child name is npc_id
+                    if name.startswith("npc:"):
+                        child_name = name[4:]  # "npc_photo_01"
+                    
+                    # Check if process is still alive (might just be slow)
+                    proc = self.children.get(child_name)
+                    if proc and proc.poll() is None:
+                        # Process alive but not reporting health — it's hung
+                        print(f"[health] {child_name} is alive but not reporting health ({age:.0f}s stale). Restarting...")
+                        self._restart_process(child_name)
+                    elif proc is None:
+                        print(f"[health] {child_name} has health key but no supervisor child. Skipping.")
+                
+                r.close()
+            except Exception as e:
+                # Don't spam logs if Redis is temporarily unavailable
+                pass
 
     def _write_status_file(self):
         """Write current process status to data/processes.json for the API server."""

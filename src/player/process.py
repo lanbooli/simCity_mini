@@ -101,8 +101,18 @@ class PlayerProcess:
 
     async def run(self):
         await self.start()
+        _health_tick = 0
         while self._running:
             await asyncio.sleep(1.0)
+            _health_tick += 1
+            if _health_tick % 15 == 0:
+                try:
+                    await self.broker.report_health(
+                        f"player:{self.player_id}",
+                        status="alive",
+                    )
+                except Exception:
+                    pass
 
     async def shutdown(self):
         logger.info("Player process shutting down...")

@@ -458,7 +458,14 @@ class Gateway:
             )
 
     async def _stats_reporter(self):
-        """Periodic stats reporting."""
+        """Periodic stats reporting and health check."""
+        broker = None
+        try:
+            from src.common.message_broker import RedisBroker
+            broker = RedisBroker()
+            await broker.connect()
+        except Exception:
+            pass
         while self._running:
             await asyncio.sleep(60)
             now = time.monotonic()
@@ -471,6 +478,19 @@ class Gateway:
                 f"rate={rate:.1f}/s circuit={self._cb.state} "
                 f"player_q={self._player_queue.qsize()} npc_q={self._npc_queue.qsize()}"
             )
+            if broker:
+                try:
+                    await broker.report_health(
+                        "llm_gateway",
+                        status="alive",
+                        extra={
+                            "processed": self._stats["processed"],
+                            "errors": self._stats["errors"],
+                            "circuit": self._cb.state,
+                        },
+                    )
+                except Exception:
+                    pass
             self._stats["last_report"] = now
 
 

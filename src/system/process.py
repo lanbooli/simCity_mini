@@ -84,7 +84,18 @@ class SystemProcess:
         """Main game loop."""
         await self.start()
 
+        _health_tick = 0
         while self._running:
+            _health_tick += 1
+            if _health_tick % 15 == 0:
+                try:
+                    await self.broker.report_health(
+                        "system",
+                        status="alive",
+                        extra={"tick": self._tick_count},
+                    )
+                except Exception:
+                    pass
             await self.time_mgr.run_tick()
             self._tick_count += 1
 

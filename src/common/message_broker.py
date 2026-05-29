@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
+import time
 import traceback
 from abc import ABC, abstractmethod
 from typing import Any, Callable, Optional
@@ -201,3 +203,34 @@ class RedisBroker(MessageBroker):
         """Release a Redis lock."""
         await self._ensure_connected()
         await self._redis.delete(key)
+
+    # ── Health Check ────────────────────────────────────
+
+    async def report_health(self, name: str, status: str = "alive", extra: dict | None = None) -> None:
+        """Report process health to Redis. Called periodically by each process."""
+        data = {
+            "name": name,
+            "status": status,
+            "pid": os.getpid(),
+            "timestamp": time.time(),
+        }
+        if extra:
+            data.update(extra)
+        await self.kv_set(f"health:{name}", data)
+
+    async def get_health(self, name: str) -> dict | None:
+        """Get health status of a process."""
+        return await self.kv_get(f"health:{name}")
+
+    async def get_all_healths(self, prefix: str = "health:") -> dict[str, dict]:
+        """Get health status of all processes matching prefix."""
+        await self._ensure_connected()
+        keys = await self._redis.keys(f"{prefix}*")
+        result = {}
+        for key in keys:
+            val = await self._redis.get(key)
+            if val:
+                k = key.decode() if isinstance(key, bytes) else key
+                name = k[len(prefix):]
+                result[name] = json.loads(val)
+        return result

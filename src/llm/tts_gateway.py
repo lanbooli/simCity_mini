@@ -144,6 +144,7 @@ class TTSGateway:
         self._tasks = [
             asyncio.create_task(self._poll_loop(self._consumer_name)),
             asyncio.create_task(self._cleanup_loop()),
+            asyncio.create_task(self._health_loop()),
         ]
         logger.info(f"TTS Gateway {self._instance_id} ready (max_concurrent={MAX_CONCURRENT})")
         await asyncio.gather(*self._tasks, return_exceptions=True)
@@ -529,6 +530,25 @@ class TTSGateway:
                 f"TTS {req_id} complete: {total_elapsed:.0f}ms total, "
                 f"{len(sentences)} chunks"
             )
+
+    async def _health_loop(self):
+        """Periodically report health to Redis."""
+        import time as _time
+        while self._running:
+            await asyncio.sleep(15)
+            try:
+                await self._redis.set(
+                    f"health:tts",
+                    json.dumps({
+                        "name": "tts_gateway",
+                        "status": "alive",
+                        "pid": os.getpid(),
+                        "timestamp": _time.time(),
+                        "queue_size": len(getattr(self, "_pending_requests", [])),
+                    }),
+                )
+            except Exception:
+                pass
 
     async def _cleanup_loop(self):
         """Periodically clean old audio files and stale consumers."""
