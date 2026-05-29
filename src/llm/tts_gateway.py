@@ -97,7 +97,7 @@ class TTSGateway:
         self._voice_refs: dict[str, dict] = {}  # npc_id → {audio, text}
         self._redis: Optional[aioredis.Redis] = None
         self._running = False
-        self._sem: Optional[asyncio.Semaphore] = None
+        self._lock: Optional[asyncio.Lock] = None
         self._audio_dir = Path(AUDIO_OUT_DIR)
         self._instance_id = str(uuid.uuid4())[:8]
 
@@ -139,7 +139,7 @@ class TTSGateway:
 
         # Start workers
         self._running = True
-        self._sem = asyncio.Semaphore(MAX_CONCURRENT)
+        self._lock = asyncio.Lock()
         self._consumer_name = f"tts_gateway_{self._instance_id}"
 
         # Clean up stale consumers from previous crashed instances
@@ -283,7 +283,15 @@ class TTSGateway:
             logger.error(f"Claim pending error: {e}")
 
     async def _process(self, msg_id: bytes, fields: dict):
-        async with self._sem:
+        # Reject if already processing a request
+        if self._lock.locked():
+            logger.debug(f"TTS busy, skipping {msg_id}")
+            try:
+                await self._redis.xack(REQUEST_STREAM, CONSUMER_GROUP, msg_id)
+            except Exception:
+                pass
+            return
+        async with self._lock:
             try:
                 await self._process_request(msg_id, fields)
             except Exception as e:
