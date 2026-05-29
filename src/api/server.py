@@ -139,6 +139,7 @@ def _load_scene_for_player(player_id: str, scene_id: str) -> dict | None:
         npcs = fetch_all(conn, """SELECT n.id, n.name, n.gender, n.career,
                         n.current_mood, n.current_activity,
                         sn.role, json_extract(n.appearance, '$.avatar') as avatar,
+                        json_extract(n.appearance, '$.fullbody') as fullbody,
                         json_extract(n.personality, '$') as personality
                         FROM scene_npc sn JOIN npc n ON sn.npc_id = n.id
                         WHERE sn.scene_id = ? AND n.is_active = 1""", (scene_id,))
@@ -284,7 +285,7 @@ async def game_websocket(ws: WebSocket, player_id: str = "player_001"):
                         game_time.get("minute", 0),
                     )
                 # Look up player name from DB for the stream message
-                player_name = "玩家"
+                player_name = "新居民"
                 try:
                     conn = get_connection()
                     try:
@@ -360,7 +361,7 @@ async def game_websocket(ws: WebSocket, player_id: str = "player_001"):
                     await ws.send_json({"type": "scene_update", "data": scene_data})
 
                     # Look up player name for the greeting notification
-                    player_name = "玩家"
+                    player_name = "新居民"
                     try:
                         conn = get_connection()
                         try:
@@ -386,10 +387,48 @@ async def game_websocket(ws: WebSocket, player_id: str = "player_001"):
 
             # ── Voice interface hook (future) ──────
             elif msg_type == "voice_input":
-                # [FUTURE] Receive audio data from browser, transcribe, and send as dialogue
-                await ws.send_json({"type": "error", "data": {
-                    "code": "not_implemented",
-                    "message": "语音输入功能即将推出",
+                # Receive speech-recognized text from browser and forward to NPC dialogue
+                d = msg.get("data", {})
+                npc_id = d.get("npc_id", "")
+                content = d.get("content", "").strip()
+                if not npc_id or not content:
+                    await ws.send_json({"type": "error", "data": {
+                        "code": "invalid_voice_input",
+                        "message": "语音输入无效",
+                    }})
+                    continue
+                logger.info(f"WS voice_input: player={player_id} npc={npc_id} content={content[:50]}")
+                game_time = await broker.kv_get("state:game_time")
+                time_str = ""
+                if game_time:
+                    time_str = game_time_to_str(
+                        game_time.get("day", 1),
+                        game_time.get("hour", 8),
+                        game_time.get("minute", 0),
+                    )
+                # Look up player name from DB
+                player_name = "新居民"
+                try:
+                    conn = get_connection()
+                    try:
+                        row = fetch_one(conn, "SELECT name FROM player WHERE id = ?", (player_id,))
+                        if row:
+                            player_name = row["name"]
+                    finally:
+                        conn.close()
+                except Exception:
+                    pass
+                await broker.stream_add(f"stream:dialogue:{npc_id}", {
+                    "player_id": player_id,
+                    "npc_id": npc_id,
+                    "content": content,
+                    "game_time": time_str,
+                    "player_name": player_name,
+                })
+                # Acknowledge to frontend
+                await ws.send_json({"type": "voice_input_ack", "data": {
+                    "npc_id": npc_id,
+                    "content": content,
                 }})
 
     except WebSocketDisconnect:
@@ -399,6 +438,25 @@ async def game_websocket(ws: WebSocket, player_id: str = "player_001"):
         logger.error(f"WS error player={player_id}:\n{traceback.format_exc()}")
         ws_manager.disconnect(player_id)
 
+
+# ── File upload ───────────────────────────────────
+
+import shutil
+from fastapi import UploadFile, File
+
+UPLOAD_DIR = Path(__file__).parent.parent.parent / "frontend" / "assets" / "uploads"
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+
+@app.post("/api/upload")
+async def upload_file(file: UploadFile = File(...)):
+    """Upload an image file and return its URL."""
+    import uuid
+    ext = Path(file.filename).suffix if file.filename else ".jpg"
+    filename = f"{uuid.uuid4().hex}{ext}"
+    filepath = UPLOAD_DIR / filename
+    with open(filepath, "wb") as f:
+        shutil.copyfileobj(file.file, f)
+    return {"url": f"/assets/uploads/{filename}"}
 
 # ── Health check ───────────────────────────────────
 

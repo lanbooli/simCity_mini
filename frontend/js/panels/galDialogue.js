@@ -25,6 +25,8 @@ const GALDialogue = {
     document.getElementById('galDialogueInput').addEventListener('keydown', (e) => {
       if (e.key === 'Enter') this.sendMessage();
     });
+    this._initSpeechInput();
+    this._initCallMode();
 
     // Expanded action tabs
     document.getElementById('galActionsTabs').querySelectorAll('.gal-act-tab').forEach(tab => {
@@ -46,7 +48,17 @@ const GALDialogue = {
       if (!overlay || overlay.style.display === 'none') return;
       const npcId = Store.get('selectedNpcId');
       const npc = Store.get('selectedNpcDetail');
-      if (npcId && npc) this._renderPortrait(npc);
+      if (npcId && npc) {
+        this._renderPortrait(npc);
+        this._renderTextbox(Store.get('dialogueMessages') || []);
+      }
+    });
+    // Also update when player data changes
+    Store.on('playerData', (pd) => {
+      if (pd && Store.get('selectedNpcId')) {
+        const npc = Store.get('selectedNpcDetail');
+        if (npc) this._renderPortrait(npc);
+      }
     });
   },
 
@@ -96,6 +108,10 @@ const GALDialogue = {
       // Enable input
       document.getElementById('galDialogueInput').disabled = false;
       document.getElementById('galBtnSend').disabled = false;
+      const galMicBtn = document.getElementById('galBtnMic');
+      if (galMicBtn) galMicBtn.disabled = false;
+      const galCallBtn = document.getElementById('galBtnCall');
+      if (galCallBtn) galCallBtn.disabled = false;
       document.getElementById('galDialogueInput').focus();
 
       // Load history
@@ -174,37 +190,64 @@ const GALDialogue = {
     }
   },
 
-  // ── Portrait Rendering ───────────────────────
+  // ── Character Portrait Rendering (left-center-right) ──
+
+  _setCharImage(side, imgUrl) {
+    const emojiEl = document.getElementById(`galChar${side}Emoji`);
+    const imgEl = document.getElementById(`galChar${side}Img`);
+    if (!emojiEl || !imgEl) return;
+    if (imgUrl) {
+      imgEl.src = imgUrl;
+      imgEl.style.display = 'block';
+      emojiEl.style.display = 'none';
+      imgEl.onerror = () => {
+        imgEl.style.display = 'none';
+        emojiEl.style.display = 'block';
+      };
+    } else {
+      imgEl.style.display = 'none';
+      emojiEl.style.display = 'block';
+    }
+  },
 
   _renderPortrait(npc) {
     const state = Store.get('npcs')?.[npc.id] || {};
     const mood = state.mood || npc.current_mood || 'neutral';
     const moodEmoji = { happy: '😊', excited: '🤩', neutral: '😐', sad: '😢', angry: '😠', bored: '🥱' };
 
-    // Real photo if available (avatar is inside appearance JSON)
-    const avatar = npc.appearance?.avatar || npc.avatar;
+    // NPC left side: fullbody > avatar > emoji
+    const fullbody = npc.appearance?.fullbody || npc.fullbody || '';
+    const avatar = npc.appearance?.avatar || npc.avatar || '';
+    const npcImg = fullbody || avatar;
     const genderEmoji = npc.gender === 'female' ? '👩' : npc.gender === 'male' ? '👨' : '🧑';
-    document.getElementById('galPortraitEmoji').textContent = genderEmoji;
-    document.getElementById('galPortraitEmoji').style.display = avatar ? 'none' : 'block';
+    document.getElementById('galCharLeftEmoji').textContent = genderEmoji;
+    document.getElementById('galCharLeftName').textContent = npc.name;
+    this._setCharImage('Left', npcImg);
 
-    const imgEl = document.getElementById('galPortraitImg');
-    if (avatar) {
-      imgEl.src = avatar;
-      imgEl.style.display = 'block';
-      imgEl.onerror = () => {
-        imgEl.style.display = 'none';
-        document.getElementById('galPortraitEmoji').style.display = 'block';
-      };
-    } else {
-      imgEl.style.display = 'none';
+    // Player right side: fullbody > avatar > emoji
+    const playerData = Store.get('playerData');
+    if (playerData) {
+      const playerAppearance = (typeof playerData.appearance === 'string')
+        ? JSON.parse(playerData.appearance) : (playerData.appearance || {});
+      const playerFullbody = playerAppearance.fullbody || '';
+      const playerAvatar = playerAppearance.avatar || '';
+      const playerImg = playerFullbody || playerAvatar;
+      document.getElementById('galCharRightEmoji').textContent = '🧑';
+      document.getElementById('galCharRightName').textContent = playerData.name || '我';
+      this._setCharImage('Right', playerImg);
     }
 
-    // Status: activity + mood + auto_action
+    // NPC status below portrait
     const activity = state.current_activity || npc.current_activity || '闲逛中';
     const aa = state.auto_action;
     const autoText = aa ? ` · ${aa.icon || ''} ${aa.display_text || aa.action_name}` : '';
-    document.getElementById('galNpcStatus').textContent = `${activity} ${moodEmoji[mood] || '😐'}${autoText}`;
-    document.getElementById('galNpcNameLabel').textContent = npc.name;
+    const moodIcon = moodEmoji[mood] || '😐';
+    document.getElementById('galCharLeftStatus').textContent = `${activity}${autoText}`;
+    document.getElementById('galCharLeftMood').textContent = moodIcon;
+
+    // Player mood/status (if available)
+    document.getElementById('galCharRightStatus').textContent = '';
+    document.getElementById('galCharRightMood').textContent = '';
 
     // Update top-bar mood indicator
     const moodStat = document.getElementById('galMoodStat');
@@ -484,6 +527,160 @@ const GALDialogue = {
   },
 
   // ── Audio ────────────────────────────────────
+
+  _initCallMode() {
+    const callBtn = document.getElementById('galBtnCall');
+    if (!callBtn) return;
+    this._inCall = false;
+    this._callPhase = 'idle';
+
+    callBtn.addEventListener('click', () => {
+      this._inCall ? this._endCall() : this._startCall();
+    });
+
+    if (window.ttsAudioQueue) {
+      window.ttsAudioQueue._onQueueComplete = () => {
+        if (this._inCall && this._callPhase === 'speaking') {
+          this._resumeCallListening();
+        }
+      };
+    }
+  },
+
+  _startCall() {
+    const npcId = Store.get('selectedNpcId');
+    if (!npcId) return;
+    if (!this._speechInput || !this._speechInput.supported) {
+      alert('您的浏览器不支持语音识别，请使用 Chrome');
+      return;
+    }
+    this._inCall = true;
+    this._callPhase = 'listening';
+
+    const callBtn = document.getElementById('galBtnCall');
+    if (callBtn) { callBtn.textContent = '🔴 挂断'; callBtn.classList.add('in-call'); }
+
+    const input = document.getElementById('galDialogueInput');
+    if (input) { input.placeholder = '🎤 通话中...'; input.disabled = true; }
+    document.getElementById('galBtnSend').disabled = true;
+    const micBtn = document.getElementById('galBtnMic');
+    if (micBtn) micBtn.disabled = true;
+
+    this._showCallStatus('🎤 请说话...');
+
+    this._speechInput._onUtteranceComplete = (text) => {
+      if (!this._inCall) return;
+      this._callPhase = 'processing';
+      this._showCallStatus('⏳ 发送中...');
+      this._sendVoiceMessage(text);
+    };
+
+    this._speechInput.startCall();
+  },
+
+  _sendVoiceMessage(text) {
+    const npcId = Store.get('selectedNpcId');
+    if (!npcId || !text) return;
+    WSClient.send({ type: 'dialogue_send', data: { npc_id: npcId, content: text } });
+    Store.addDialogue({
+      speakerId: 'player', speakerName: '我', speakerType: 'player',
+      content: text, gameTime: '',
+    });
+    this._showCallStatus('💬 等待回复...');
+    this._callPhase = 'speaking';
+  },
+
+  _resumeCallListening() {
+    if (!this._inCall || !this._speechInput) return;
+    this._callPhase = 'listening';
+    this._showCallStatus('🎤 请说话...');
+    this._speechInput.resumeListening();
+  },
+
+  _endCall() {
+    this._inCall = false;
+    this._callPhase = 'idle';
+    if (this._speechInput) this._speechInput.stopCall();
+
+    const callBtn = document.getElementById('galBtnCall');
+    if (callBtn) { callBtn.textContent = '📞 通话'; callBtn.classList.remove('in-call'); }
+
+    const input = document.getElementById('galDialogueInput');
+    if (input) { input.placeholder = '输入你想说的话...'; input.disabled = false; }
+    document.getElementById('galBtnSend').disabled = false;
+    const micBtn = document.getElementById('galBtnMic');
+    if (micBtn) micBtn.disabled = false;
+
+    this._hideCallStatus();
+  },
+
+  _showCallStatus(msg) {
+    let status = document.getElementById('galCallStatus');
+    if (!status) {
+      status = document.createElement('div');
+      status.id = 'galCallStatus';
+      status.className = 'gal-call-status';
+      const inputArea = document.querySelector('.gal-input-area');
+      if (inputArea) inputArea.parentNode.insertBefore(status, inputArea);
+    }
+    status.textContent = msg;
+    status.style.display = 'block';
+  },
+
+  _hideCallStatus() {
+    const status = document.getElementById('galCallStatus');
+    if (status) status.style.display = 'none';
+  },
+
+  _initSpeechInput() {
+    const micBtn = document.getElementById('galBtnMic');
+    if (!micBtn) return;
+    const input = document.getElementById('galDialogueInput');
+    if (!input) return;
+
+    const sr = new SpeechInput({
+      onResult: (result) => {
+        input.value = result.final + (result.interim ? '...' : '');
+      },
+      onStatus: (status) => {
+        if (status === 'listening') {
+          micBtn.classList.add('recording');
+          micBtn.textContent = '🔴';
+          micBtn.title = '点击停止录音';
+        } else {
+          micBtn.classList.remove('recording');
+          micBtn.textContent = '🎤';
+          micBtn.title = '语音输入';
+        }
+      },
+      onError: () => {
+        micBtn.classList.remove('recording');
+        micBtn.textContent = '🎤';
+        micBtn.title = '语音输入';
+      },
+    });
+    this._speechInput = sr;
+
+    micBtn.addEventListener('click', () => {
+      if (!sr.supported) {
+        alert('您的浏览器不支持语音识别，请使用 Chrome');
+        return;
+      }
+      if (sr.listening) {
+        const text = sr.currentText.trim();
+        sr.stop();
+        if (text) {
+          input.value = text;
+          this.sendMessage();
+        }
+      } else {
+        sr.clear();
+        sr.start();
+      }
+    });
+
+    if (micBtn.disabled) micBtn.disabled = false;
+  },
 
   _toggleVoice() {
     const queue = window.ttsAudioQueue;

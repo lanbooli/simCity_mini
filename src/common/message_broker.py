@@ -49,6 +49,8 @@ class MessageBroker(ABC):
 
     @abstractmethod
     async def kv_delete(self, key: str) -> None: ...
+    async def acquire_lock(self, key: str, ttl_seconds: int = 5) -> bool: ...
+    async def release_lock(self, key: str) -> None: ...
 
     @abstractmethod
     async def disconnect(self) -> None: ...
@@ -186,5 +188,16 @@ class RedisBroker(MessageBroker):
         await self._redis.set(key, json.dumps(value, ensure_ascii=False))
 
     async def kv_delete(self, key: str) -> None:
+        await self._ensure_connected()
+        await self._redis.delete(key)
+
+    async def acquire_lock(self, key: str, ttl_seconds: int = 5) -> bool:
+        """Try to acquire a Redis lock. Returns True if acquired."""
+        await self._ensure_connected()
+        acquired = await self._redis.set(key, "1", nx=True, expire=ttl_seconds)
+        return bool(acquired)
+
+    async def release_lock(self, key: str) -> None:
+        """Release a Redis lock."""
         await self._ensure_connected()
         await self._redis.delete(key)

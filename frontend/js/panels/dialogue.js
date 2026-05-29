@@ -95,6 +95,8 @@ const Dialogue = {
     });
     btn.addEventListener('click', () => this.sendMessage());
     voiceBtn.addEventListener('click', () => this._toggleVoice());
+    this._initSpeechInput();
+    this._initCallMode();
 
     Store.on('dialogueMessages', (msgs) => this.renderMessages(msgs));
     Store.on('isNpcTyping', (typing) => this._showTyping(typing));
@@ -181,10 +183,14 @@ const Dialogue = {
     const input = document.getElementById('dialogueInput');
     const btn = document.getElementById('btnSend');
     const voiceBtn = document.getElementById('btnVoice');
+    const micBtn = document.getElementById('btnMic');
+    const callBtn = document.getElementById('btnCall');
     const actionPanel = document.getElementById('dialogueActions');
     if (input) input.disabled = !enable;
     if (btn) btn.disabled = !enable;
     if (voiceBtn) voiceBtn.disabled = !enable;
+    if (micBtn) micBtn.disabled = !enable;
+    if (callBtn) callBtn.disabled = !enable;
     if (actionPanel) actionPanel.style.display = enable ? 'block' : 'none';
   },
 
@@ -720,6 +726,208 @@ const Dialogue = {
 
   _escapeAttr(s) {
     return s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  },
+
+  _initCallMode() {
+    const callBtn = document.getElementById('btnCall');
+    if (!callBtn) return;
+    this._inCall = false;
+    this._callPhase = 'idle'; // idle | listening | processing | speaking
+
+    callBtn.addEventListener('click', () => {
+      if (this._inCall) {
+        this._endCall();
+      } else {
+        this._startCall();
+      }
+    });
+
+    // Listen for TTS queue completion to resume listening
+    if (window.ttsAudioQueue) {
+      window.ttsAudioQueue._onQueueComplete = () => {
+        if (this._inCall && this._callPhase === 'speaking') {
+          this._resumeCallListening();
+        }
+      };
+    }
+  },
+
+  _startCall() {
+    const npcId = Store.get('selectedNpcId');
+    if (!npcId) return;
+    if (!this._speechInput || !this._speechInput.supported) {
+      alert('您的浏览器不支持语音识别，请使用 Chrome');
+      return;
+    }
+
+    this._inCall = true;
+    this._callPhase = 'listening';
+
+    // UI changes
+    const callBtn = document.getElementById('btnCall');
+    if (callBtn) {
+      callBtn.textContent = '🔴 挂断';
+      callBtn.classList.add('in-call');
+    }
+    const input = document.getElementById('dialogueInput');
+    if (input) { input.placeholder = '🎤 通话中，请说话...'; input.disabled = true; }
+    document.getElementById('btnSend').disabled = true;
+    document.getElementById('btnMic').disabled = true;
+
+    // Add call status indicator
+    this._showCallStatus('🎤 请说话...');
+
+    // Set up utterance callback
+    this._speechInput._onUtteranceComplete = (text) => {
+      if (!this._inCall) return;
+      this._callPhase = 'processing';
+      this._showCallStatus('⏳ 发送中...');
+      this._sendVoiceMessage(text);
+    };
+
+    // Start listening
+    this._speechInput.startCall();
+  },
+
+  _sendVoiceMessage(text) {
+    const npcId = Store.get('selectedNpcId');
+    if (!npcId || !text) return;
+
+    // Send as regular dialogue
+    WSClient.send({
+      type: 'dialogue_send',
+      data: {
+        npc_id: npcId,
+        content: text,
+      },
+    });
+
+    // Add local message to history
+    Store.addDialogue({
+      speakerId: 'player',
+      speakerName: '我',
+      speakerType: 'player',
+      content: text,
+      gameTime: '',
+    });
+
+    this._showCallStatus('💬 等待回复...');
+    this._callPhase = 'speaking';
+  },
+
+  _resumeCallListening() {
+    if (!this._inCall || !this._speechInput) return;
+    this._callPhase = 'listening';
+    this._showCallStatus('🎤 请说话...');
+    this._speechInput.resumeListening();
+  },
+
+  _endCall() {
+    this._inCall = false;
+    this._callPhase = 'idle';
+
+    if (this._speechInput) this._speechInput.stopCall();
+
+    // Restore UI
+    const callBtn = document.getElementById('btnCall');
+    if (callBtn) {
+      callBtn.textContent = '📞 通话';
+      callBtn.classList.remove('in-call');
+    }
+    const input = document.getElementById('dialogueInput');
+    if (input) {
+      input.placeholder = '输入你想说的话，或点击上方动作按钮...';
+      input.disabled = false;
+    }
+    const npcId = Store.get('selectedNpcId');
+    if (npcId) {
+      document.getElementById('btnSend').disabled = false;
+      document.getElementById('btnMic').disabled = false;
+    }
+
+    this._hideCallStatus();
+  },
+
+  _showCallStatus(msg) {
+    let status = document.getElementById('callStatus');
+    if (!status) {
+      status = document.createElement('div');
+      status.id = 'callStatus';
+      status.className = 'call-status';
+      const inputArea = document.querySelector('.dialogue-input-area');
+      if (inputArea) inputArea.parentNode.insertBefore(status, inputArea);
+    }
+    status.textContent = msg;
+    status.style.display = 'block';
+  },
+
+  _hideCallStatus() {
+    const status = document.getElementById('callStatus');
+    if (status) status.style.display = 'none';
+  },
+
+  _initSpeechInput() {
+    const micBtn = document.getElementById('btnMic');
+    if (!micBtn) return;
+    const input = document.getElementById('dialogueInput');
+    if (!input) return;
+
+    const sr = new SpeechInput({
+      onResult: (result) => {
+        // Update input field with recognized text
+        input.value = result.final + (result.interim ? '...' : '');
+        input.focus();
+      },
+      onStatus: (status) => {
+        if (status === 'listening') {
+          micBtn.classList.add('recording');
+          micBtn.textContent = '🔴';
+          micBtn.title = '点击停止录音';
+        } else {
+          micBtn.classList.remove('recording');
+          micBtn.textContent = '🎤';
+          micBtn.title = '语音输入';
+        }
+        // Enable/disable send based on content
+        this._updateSendButton();
+      },
+      onError: () => {
+        micBtn.classList.remove('recording');
+        micBtn.textContent = '🎤';
+        micBtn.title = '语音输入';
+      },
+    });
+    this._speechInput = sr;
+
+    micBtn.addEventListener('click', () => {
+      if (!sr.supported) {
+        alert('您的浏览器不支持语音识别，请使用 Chrome');
+        return;
+      }
+      if (sr.listening) {
+        // Stop and send the recognized text
+        const text = sr.currentText.trim();
+        sr.stop();
+        if (text) {
+          input.value = text;
+          this.sendMessage();
+        }
+      } else {
+        sr.clear();
+        sr.start();
+      }
+    });
+
+    // Auto-enable mic when NPC is selected
+    if (micBtn.disabled) micBtn.disabled = false;
+  },
+
+  _updateSendButton() {
+    const input = document.getElementById('dialogueInput');
+    const btn = document.getElementById('btnSend');
+    if (input && btn) {
+      btn.disabled = !input.value.trim();
+    }
   },
 
   _toggleVoice() {

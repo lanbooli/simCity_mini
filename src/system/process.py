@@ -48,6 +48,7 @@ class SystemProcess:
 
         # Initialize managers
         self.time_mgr = TimeManager(self.broker)
+        self.time_mgr.load_from_db()  # Restore persisted game time
         self.weather_mgr = WeatherManager(self.broker, initial=initial_weather)
         self.scene_mgr = SceneManager(self.broker)
         self.event_mgr = EventManager(self.broker)

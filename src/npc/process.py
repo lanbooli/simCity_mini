@@ -291,7 +291,8 @@ class NpcProcess:
             conn.close()
 
     async def _on_player_entered(self, data: dict):
-        """Immediately greet player when they enter this NPC's scene."""
+        """Greet player when they enter this NPC's scene.
+        Only one NPC per scene greets per entry (uses Redis lock)."""
         if not data or not isinstance(data, dict):
             return
         entered_scene_id = data.get("scene_id", "")
@@ -303,7 +304,7 @@ class NpcProcess:
         if entered_scene_id != current_scene:
             return
 
-        # Don't greet if in dialogue or cooldowns not expired
+        # Don't greet if in dialogue
         if self._in_dialogue_with:
             return
         if "greet" in self._action_cooldowns and self._action_cooldowns["greet"] > 0:
@@ -318,10 +319,15 @@ class NpcProcess:
         career = self.npc_data.get("career", "")
         at_workplace = bool(career and current_scene and CAREER_WORKPLACE.get(career) == current_scene)
 
-        # Not at workplace: only greet if player is acquaintance+
+        # Only greet if player is acquaintance+ (fav >= 15) OR at workplace
         fav = rel["favorability"] if rel else 0
-        if not at_workplace and fav < 15:
+        if fav < 15 and not at_workplace:
             return
+
+        # Only one NPC per scene per player entry (acquire lock)
+        lock_key = f"lock:greet:{entered_scene_id}:{player_id}"
+        if not await self.broker.acquire_lock(lock_key, ttl_seconds=3):
+            return  # Another NPC is already greeting
 
         logger.info(f"NPC {self.npc_data['name']}: player {player_name} entered my scene{' (workplace)' if at_workplace else ''}, greeting")
         # Execute greeting directly (same as _execute_player_greeting but without perception lookup)
@@ -339,23 +345,28 @@ class NpcProcess:
 
         try:
             if at_workplace and career in CAREER_GREETINGS:
+                # Career greeting templates (instant, no LLM)
                 templates = CAREER_GREETINGS[career]
                 greeting_text = random.choice(templates)
                 greeting_text = greeting_text.replace("{name}", self.npc_data["name"])
                 greeting = {"content": f"（看到{player_name}，露出职业的微笑）「{greeting_text}」", "favorability_change": 0}
-                # Pre-generated audio fallback: only use if file exists
                 pregen_path = f"/assets/audio/greetings/{self.npc_id}_{int(hashlib.md5(greeting_text.encode()).hexdigest()[:8], 16) % 10000:04d}.wav"
                 import os
                 frontend_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "frontend")
                 if os.path.exists(frontend_dir + pregen_path):
                     greeting["audio_url"] = pregen_path
+            elif at_workplace:
+                # Workplace but no career template — simple rule greeting
+                greeting = {"content": f"（看到{player_name}，微笑着点头示意）「你好，欢迎！」", "favorability_change": 0}
             else:
-                greeting = await self.dialogue_handler.generate_greeting(
-                    player_name=player_name, player_id=player_id,
-                    scene_name=self._scene_name, game_time=self._game_time_str(),
-                    player_data=player_data,
-                    at_workplace=at_workplace,
-                )
+                # Non-workplace: simple personality-based greeting (instant)
+                rel_type = rel["relationship_type"] if rel else "stranger"
+                if rel_type in ("friend", "best_friend", "boyfriend", "girlfriend", "spouse"):
+                    greeting = {"content": f"（看到{player_name}，开心地挥手）「嘿，{player_name}！真巧在这里遇到你～」", "favorability_change": 1}
+                elif rel_type == "acquaintance":
+                    greeting = {"content": f"（看到{player_name}，礼貌地笑了笑）「{player_name}，你好啊。」", "favorability_change": 0}
+                else:
+                    greeting = {"content": f"（看到{player_name}，轻轻点头示意）", "favorability_change": 0}
         except Exception as e:
             logger.warning(f"Immediate greeting failed: {e}")
             greeting = {"content": f"（看到{player_name}，友好地点了点头）", "favorability_change": 0}

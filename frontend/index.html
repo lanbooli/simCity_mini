@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>城市小镇</title>
 <link rel="stylesheet" href="css/reset.css?v=14">
-<link rel="stylesheet" href="css/main.css?v=16">
+<link rel="stylesheet" href="css/main.css?v=2">
 <link rel="stylesheet" href="css/components.css?v=14">
 <link rel="stylesheet" href="css/admin.css?v=14">
 </head>
@@ -106,6 +106,8 @@
            placeholder="输入你想说的话，或点击上方动作按钮..." disabled>
     <button class="btn-send" id="btnSend" disabled>发送</button>
     <button class="btn-voice" id="btnVoice" disabled title="语音播放中 (点击关闭)">🔊</button>
+    <button class="btn-mic" id="btnMic" disabled title="语音输入">🎤</button>
+    <button class="btn-call" id="btnCall" disabled title="语音通话">📞</button>
   </div>
   <div class="dialogue-idle" id="idleTimer" style="display:none;">
     ⏱ 空闲: <span id="idleCountdown">10:00</span>
@@ -226,6 +228,21 @@
         </div>
       </div>
       <div class="ps-section">
+        <h3>角色形象</h3>
+        <div class="ps-field-row">
+          <div class="ps-field">
+            <label>头像图片</label>
+            <input type="file" id="psAvatarUpload" accept="image/*" style="font-size:12px;">
+            <div id="psAvatarPreview" style="margin-top:4px;font-size:11px;color:#888;"></div>
+          </div>
+          <div class="ps-field">
+            <label>全身照</label>
+            <input type="file" id="psFullbodyUpload" accept="image/*" style="font-size:12px;">
+            <div id="psFullbodyPreview" style="margin-top:4px;font-size:11px;color:#888;"></div>
+          </div>
+        </div>
+      </div>
+      <div class="ps-section">
         <h3>性格特点</h3>
         <div class="ps-field">
           <label for="psPersonality">性格标签（用逗号或空格分隔）</label>
@@ -280,21 +297,22 @@
     </div>
   </div>
 
-  <!-- Main content: portrait + textbox -->
+  <!-- Main content: left (speaker) + center (dialogue) + right (listener) -->
   <div class="gal-main">
-    <!-- NPC Portrait Area -->
-    <div class="gal-portrait-area" id="galPortraitArea">
-      <div class="gal-portrait" id="galPortrait">
-        <div class="gal-portrait-emoji" id="galPortraitEmoji">🧑</div>
-        <img class="gal-portrait-img" id="galPortraitImg" src="" alt="" style="display:none;">
+    <!-- Left: Speaker (NPC by default) -->
+    <div class="gal-char-left" id="galCharLeft">
+      <div class="gal-char-portrait" id="galCharLeftPortrait">
+        <div class="gal-char-emoji" id="galCharLeftEmoji">🧑</div>
+        <img class="gal-char-img" id="galCharLeftImg" src="" alt="" style="display:none;">
       </div>
-      <div class="gal-npc-info">
-        <span class="gal-npc-status" id="galNpcStatus">闲逛中</span>
-        <span class="gal-npc-name-label" id="galNpcNameLabel">NPC名字</span>
+      <div class="gal-char-info">
+        <span class="gal-char-name" id="galCharLeftName">NPC</span>
+        <span class="gal-char-status" id="galCharLeftStatus">闲逛中</span>
+        <span class="gal-char-mood" id="galCharLeftMood">😐</span>
       </div>
     </div>
 
-    <!-- Dialogue Textbox -->
+    <!-- Center: Dialogue Textbox -->
     <div class="gal-textbox" id="galTextbox">
       <div class="gal-textbox-inner">
         <div class="gal-textbox-history" id="galTextboxHistory"></div>
@@ -308,25 +326,37 @@
       </div>
     </div>
 
-    <!-- Simple Action Bar -->
-    <div class="gal-actions-simple" id="galActionsSimple">
+    <!-- Right: Listener (Player) -->
+    <div class="gal-char-right" id="galCharRight">
+      <div class="gal-char-portrait" id="galCharRightPortrait">
+        <div class="gal-char-emoji" id="galCharRightEmoji">🧑</div>
+        <img class="gal-char-img" id="galCharRightImg" src="" alt="" style="display:none;">
+      </div>
+      <div class="gal-char-info">
+        <span class="gal-char-name" id="galCharRightName">我</span>
+        <span class="gal-char-status" id="galCharRightStatus"></span>
+        <span class="gal-char-mood" id="galCharRightMood"></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Action Bars (below main layout) -->
+  <div class="gal-actions-simple" id="galActionsSimple">
+    <!-- Populated by JS -->
+  </div>
+
+  <div class="gal-actions-expanded" id="galActionsExpanded" style="display:none;">
+    <div class="gal-actions-tabs" id="galActionsTabs">
+      <button class="gal-act-tab active" data-cat="friendly">😊 友善</button>
+      <button class="gal-act-tab" data-cat="intimate">💕 亲密</button>
+      <button class="gal-act-tab" data-cat="couple">❤️ 情侣</button>
+      <button class="gal-act-tab" data-cat="physical">💪 动作</button>
+      <button class="gal-act-tab" data-cat="negative">😠 其他</button>
+    </div>
+    <div class="gal-actions-grid" id="galActionsGrid">
       <!-- Populated by JS -->
     </div>
-
-    <!-- Expanded Action Panel -->
-    <div class="gal-actions-expanded" id="galActionsExpanded" style="display:none;">
-      <div class="gal-actions-tabs" id="galActionsTabs">
-        <button class="gal-act-tab active" data-cat="friendly">😊 友善</button>
-        <button class="gal-act-tab" data-cat="intimate">💕 亲密</button>
-        <button class="gal-act-tab" data-cat="couple">❤️ 情侣</button>
-        <button class="gal-act-tab" data-cat="physical">💪 动作</button>
-        <button class="gal-act-tab" data-cat="negative">😠 其他</button>
-      </div>
-      <div class="gal-actions-grid" id="galActionsGrid">
-        <!-- Populated by JS -->
-      </div>
-      <button class="gal-btn-collapse" id="galBtnCollapse">收起 ▲</button>
-    </div>
+    <button class="gal-btn-collapse" id="galBtnCollapse">收起 ▲</button>
   </div>
 
   <!-- Input Area -->
@@ -334,6 +364,7 @@
     <input type="text" class="gal-input" id="galDialogueInput"
            placeholder="输入你想说的话，或点击上方动作按钮..." disabled>
     <button class="gal-btn-send" id="galBtnSend" disabled>发送</button>
+    <button class="gal-btn-mic" id="galBtnMic" disabled title="语音输入">🎤</button>
     <span class="gal-idle-timer" id="galIdleTimer" style="display:none;">⏱ <span id="galIdleCountdown">10:00</span></span>
   </div>
 
@@ -355,6 +386,7 @@
 <script src="js/store.js?v=13"></script>
 <script src="js/websocket.js?v=28"></script>
 <script src="js/audioPlayer.js?v=20"></script>
+<script src="js/speechRecognition.js?v=1"></script>
 <script src="js/api.js?v=14"></script>
 <script src="js/components/relationshipBar.js?v=13"></script>
 <script src="js/renderer/actionRenderer.js?v=2"></script>
@@ -365,8 +397,8 @@
 <script src="js/panels/dialogue.js?v=22"></script>
 <script src="js/panels/socialCircle.js?v=21"></script>
 <script src="js/panels/adminPanel.js?v=13"></script>
-<script src="js/panels/playerSettings.js?v=13"></script>
-<script src="js/panels/galDialogue.js?v=13"></script>
-<script src="js/main.js?v=14"></script>
+<script src="js/panels/playerSettings.js?v=2"></script>
+<script src="js/panels/galDialogue.js?v=2"></script>
+<script src="js/main.js?v=2"></script>
 </body>
 </html>

@@ -108,8 +108,9 @@ const WSClient = {
           _seq: msgSeq,
           _audioUrls: pregenAudioUrl ? [pregenAudioUrl] : [],  // pre-generated greeting audio
         });
-        // Track this as the "active" message for TTS chunk attachment
-        window._lastNpcMsgSeq = msgSeq;
+        // Track per-NPC message seq for TTS chunk attachment (prevent cross-NPC mixing)
+        if (!window._lastNpcMsgByNpc) window._lastNpcMsgByNpc = {};
+        window._lastNpcMsgByNpc[data.npc_id] = { msgSeq: msgSeq, npcName: data.npc_name };
         // If pre-generated audio URL present, play it immediately
         if (pregenAudioUrl && window.ttsAudioQueue) {
           window.ttsAudioQueue.enqueue({ audio_url: pregenAudioUrl });
@@ -154,12 +155,14 @@ const WSClient = {
         if (!isReplayChunk && window.ttsAudioQueue) {
           window.ttsAudioQueue.enqueue(data);
         }
-        // Attach audio URL to the active NPC message for replay
-        if (window._lastNpcMsgSeq && data.audio_url) {
+        // Attach audio URL to the correct NPC message using per-NPC tracking
+        if (window._lastNpcMsgByNpc && data.npc_id && window._lastNpcMsgByNpc[data.npc_id] && data.audio_url) {
+          var npcInfo = window._lastNpcMsgByNpc[data.npc_id];
+          var targetSeq = npcInfo.msgSeq;
           var msgs = Store.get('dialogueMessages');
           var targetMsg = null;
           for (var i = msgs.length - 1; i >= 0; i--) {
-            if (msgs[i]._seq === window._lastNpcMsgSeq) {
+            if (msgs[i]._seq === targetSeq && msgs[i].speakerId === data.npc_id) {
               targetMsg = msgs[i];
               break;
             }

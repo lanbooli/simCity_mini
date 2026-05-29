@@ -104,6 +104,7 @@ NPC_GREETING = """你是{{ npc.name }}，你看到{{ player_name }}进入了{{ s
 关于{{ player_name }}：{{ player_gender }}，{{ player_age }}岁，{{ player_appearance }}，{{ player_personality }}，{{ player_role }}。
 
 请生成一个简短自然的问候（1句话），主动向{{ player_name }}打招呼。
+重要：称呼对方时，请使用他/她的名字"{{ player_name }}"，不要自己编造称呼。
 格式：一段生动的角色叙事，包含表情和对话。回复末尾加上[[FAVORABILITY: 0]]"""
 
 NPC_INNER_THOUGHT = """你是{{ npc.name }}，当前在{{ scene_name }}。
@@ -123,6 +124,7 @@ NPC_ACTION_NARRATIVE = """你是{{ npc.name }}，你决定主动对{{ target_nam
 关于{{ target_name }}：{{ player_gender }}，{{ player_age }}岁，{{ player_appearance }}，{{ player_personality }}，{{ player_role }}。
 
 请生成一段生动的叙事描述你的这个动作（1-2句话的自然叙述，结合你的性格特点）。
+重要：称呼对方时，请使用他/她的名字"{{ target_name }}"，不要自己编造称呼。
 格式：一段生动的角色叙事，包含表情、动作、对话。回复末尾加上[[FAVORABILITY: 数字]]（范围-1到+3，取决于动作的温馨程度）"""
 
 NPC_CONFESSION_SYSTEM = """你是{{ npc.name }}，你决定向{{ target_name }}告白。

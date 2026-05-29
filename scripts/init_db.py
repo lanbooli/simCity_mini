@@ -198,7 +198,7 @@ def seed_data(conn):
     player_id = "player_001"
     execute(c, """INSERT OR REPLACE INTO player(id, name, birth_date, gender, appearance, personality, career, current_scene_id, home_scene_id, attributes)
                   VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (player_id, "玩家", "2000-01-01", "other",
+            (player_id, "新居民", "2000-01-01", "other",
              jd({"height": "170cm", "build": "普通"}),
              jd(["友好", "好奇"]), "小镇新居民", "scene_coffee_shop", "home_player",
              jd({"stamina": 5, "speed": 5, "strength": 5})))

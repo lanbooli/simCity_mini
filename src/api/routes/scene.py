@@ -76,6 +76,7 @@ def get_scene(scene_id: str, player_id: str = ""):
         npcs = fetch_all(conn, """SELECT n.id, n.name, n.gender, n.career,
                                 n.current_mood, n.current_activity,
                                 sn.role, json_extract(n.appearance, '$.avatar') as avatar,
+                                json_extract(n.appearance, '$.fullbody') as fullbody,
                                 json_extract(n.personality, '$') as personality
                                 FROM scene_npc sn JOIN npc n ON sn.npc_id = n.id
                                 WHERE sn.scene_id = ? AND n.is_active = 1""", (scene_id,))

@@ -32,6 +32,14 @@ const App = {
     // Select initial scene (via Sidebar which now populates sceneBar)
     await Sidebar.selectScene(Store.get('currentSceneId'));
 
+    // Fetch player data (for portrait, name, etc.)
+    try {
+      const player = await API.getPlayer(playerId);
+      if (player) Store.set('playerData', player);
+    } catch (e) {
+      console.warn('Failed to fetch player data:', e);
+    }
+
     // Initial data fetch
     try {
       const time = await API.getTime();
@@ -101,6 +109,7 @@ const App = {
         const d = json.data;
         alert(`✅ 重置完成！\n删除对话: ${d.dialogues_deleted} 条\n删除记忆: ${d.memories_deleted} 条\n重置关系: ${d.relationships_reset} 条`);
         Store.clearDialogue();
+        window._lastNpcMsgByNpc = {};
         Store.set('selectedNpcId', null);
         Store.set('selectedNpcDetail', null);
         Dialogue.enableInput(false);

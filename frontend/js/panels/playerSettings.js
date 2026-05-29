@@ -207,6 +207,30 @@ const PlayerSettings = {
     setVal('psPersonality', Array.isArray(personality) ? personality.join('，') : (personality || ''));
 
     setVal('psCareer', data?.career || '');
+
+    // Show existing images
+    const avatarPreview = document.getElementById('psAvatarPreview');
+    const fullbodyPreview = document.getElementById('psFullbodyPreview');
+    if (avatarPreview && appearance.avatar) {
+      avatarPreview.innerHTML = `<img src="${appearance.avatar}" style="max-width:60px;max-height:60px;border-radius:4px;">`;
+    }
+    if (fullbodyPreview && appearance.fullbody) {
+      fullbodyPreview.innerHTML = `<img src="${appearance.fullbody}" style="max-width:60px;max-height:80px;border-radius:4px;">`;
+    }
+  },
+
+  async _uploadImage(file) {
+    // Upload image via API and return the URL
+    const formData = new FormData();
+    formData.append('file', file);
+    try {
+      const resp = await fetch('/api/upload', { method: 'POST', body: formData });
+      const json = await resp.json();
+      if (json.url) return json.url;
+    } catch (e) {
+      console.error('Upload failed:', e);
+    }
+    return null;
   },
 
   async _save() {
@@ -220,6 +244,20 @@ const PlayerSettings = {
       const v = getVal('psApp_' + k);
       if (v) appearance[k] = v;
     });
+
+    // Handle image uploads: read as data URL for simplicity
+    const avatarFile = document.getElementById('psAvatarUpload')?.files?.[0];
+    const fullbodyFile = document.getElementById('psFullbodyUpload')?.files?.[0];
+
+    // Upload files via API if selected
+    if (avatarFile) {
+      const url = await this._uploadImage(avatarFile);
+      if (url) appearance.avatar = url;
+    }
+    if (fullbodyFile) {
+      const url = await this._uploadImage(fullbodyFile);
+      if (url) appearance.fullbody = url;
+    }
 
     const personalityStr = getVal('psPersonality');
     const personality = personalityStr
