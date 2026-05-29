@@ -75,21 +75,12 @@ const WSClient = {
         Store.setNpcState(data.npc_id || data.name, data);
         break;
       case 'dialogue_response':
-        // NPC-initiated greeting: verify NPC is in the same scene, auto-select if none selected
+        // Auto-select NPC for initiated-by-NPC messages; always show text
         if (data.npc_id !== Store.get('selectedNpcId')) {
           if (data.initiated_by_npc && typeof App !== 'undefined' && App.selectNpc) {
-            // Skip NPCs not in the current scene (stale location data)
-            var npcState = Store.getNpcState(data.npc_id);
-            var currentScene = Store.get('currentSceneId');
-            if (npcState && npcState.current_scene && currentScene && npcState.current_scene !== currentScene) {
-              console.log('[Dialogue] Skipping NPC-initiated message from', data.npc_name, '- not in current scene');
-              break;
-            }
             App.selectNpc(data.npc_id);
-            // Fall through to Store.addDialogue so text appears immediately
-          } else {
-            break;  // Different NPC, not initiated by NPC — ignore
           }
+          // Also show other NPC messages (e.g. social greetings) — don't drop them
         }
         // Reset audio queue for the new NPC response
         if (window.ttsAudioQueue) {

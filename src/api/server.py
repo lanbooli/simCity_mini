@@ -433,10 +433,10 @@ async def game_websocket(ws: WebSocket, player_id: str = "player_001"):
 
     except WebSocketDisconnect:
         logger.info(f"WS disconnect: player={player_id}")
-        ws_manager.disconnect(player_id)
+        ws_manager.disconnect(player_id, ws)
     except Exception:
         logger.error(f"WS error player={player_id}:\n{traceback.format_exc()}")
-        ws_manager.disconnect(player_id)
+        ws_manager.disconnect(player_id, ws)
 
 
 # ── File upload ───────────────────────────────────

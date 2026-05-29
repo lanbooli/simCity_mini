@@ -19,36 +19,47 @@ def _ALL_NPC_IDS():
 class WSManager:
     def __init__(self, broker: RedisBroker):
         self.broker = broker
-        self._connections: dict[str, WebSocket] = {}  # player_id -> WS
+        self._connections: dict[str, list[WebSocket]] = {}  # player_id -> [WS clients]
         self._listening = False
 
     async def connect(self, player_id: str, ws: WebSocket):
         await ws.accept()
-        self._connections[player_id] = ws
+        if player_id not in self._connections:
+            self._connections[player_id] = []
+        self._connections[player_id].append(ws)
         if not self._listening:
             self._listening = True
             asyncio.create_task(self._subscribe_channels())
 
-    def disconnect(self, player_id: str):
-        self._connections.pop(player_id, None)
+    def disconnect(self, player_id: str, ws: WebSocket = None):
+        if ws and player_id in self._connections:
+            self._connections[player_id] = [w for w in self._connections[player_id] if w is not ws]
+            if not self._connections[player_id]:
+                del self._connections[player_id]
+        elif not ws:
+            self._connections.pop(player_id, None)
 
     async def send_to_player(self, player_id: str, message: dict):
-        ws = self._connections.get(player_id)
-        if ws:
+        clients = self._connections.get(player_id, [])
+        dead = []
+        for ws in clients:
             try:
                 await ws.send_json(message)
             except Exception:
-                self.disconnect(player_id)
+                dead.append(ws)
+        for ws in dead:
+            self.disconnect(player_id, ws)
 
     async def broadcast(self, message: dict):
-        disconnected = []
-        for pid, ws in self._connections.items():
-            try:
-                await ws.send_json(message)
-            except Exception:
-                disconnected.append(pid)
-        for pid in disconnected:
-            self.disconnect(pid)
+        for pid in list(self._connections.keys()):
+            dead = []
+            for ws in self._connections.get(pid, []):
+                try:
+                    await ws.send_json(message)
+                except Exception:
+                    dead.append(ws)
+            for ws in dead:
+                self.disconnect(pid, ws)
 
     async def _subscribe_channels(self):
         """Subscribe to Redis channels and fan out to WebSocket clients."""
