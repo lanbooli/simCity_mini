@@ -222,7 +222,11 @@ class IntimacyEngine:
                 continue
 
             # Scene type check
-            if action.allowed_scenes and self.scene_type not in action.allowed_scenes:
+            # Map new scene types (cafe/market/school/etc.) to legacy categories
+            scene_cat = self.scene_type
+            if scene_cat in ("cafe", "market", "school", "library", "hospital", "bar", "gym", "restaurant", "shop"):
+                scene_cat = "indoor"
+            if action.allowed_scenes and scene_cat not in action.allowed_scenes:
                 continue
 
             # Time condition
@@ -328,7 +332,7 @@ class IntimacyEngine:
             time_mod = 0.7
 
         # Home safety bonus
-        if self.scene_type == "home":
+        if self.scene_type in ("home", "apt_a", "apt_b", "apt_c", "apt_d", "home_player"):
             time_mod *= 1.2
 
         prob = action.base_prob * mood_mod * personality_mod * time_mod

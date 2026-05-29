@@ -208,6 +208,7 @@ class NpcProcess:
     async def _on_time_update(self, data: dict):
         """Handle game time tick with perception → intention → action → reflection."""
         self._game_time = data
+        self._crisis_resolved_this_tick = False
         self._tick_counter += 1
 
         # Decrement cooldowns
@@ -241,6 +242,7 @@ class NpcProcess:
             self.physiology.tick(1.0)
             if self.physiology.is_dead:
                 logger.info(f"NPC {self.npc_data['name']} has died: {self.physiology.death_cause}")
+                self._persist_death()
                 self._running = False
                 await self._publish_state()
                 return
@@ -248,10 +250,11 @@ class NpcProcess:
         # Weekly check (aging, elder death roll) — triggers every 7 game days
         if data.get("hour") == 0 and data.get("minute") == 0 and self.physiology:
             self._days_passed += 1
-            if self._days_passed % 7 == 0:
+            if self._days_passed % 1 == 0:
                 self.physiology.daily_check()
                 if self.physiology.is_dead:
                     logger.info(f"NPC {self.npc_data['name']} has died: {self.physiology.death_cause}")
+                    self._persist_death()
                     self._running = False
                     await self._publish_state()
                     return
@@ -418,7 +421,8 @@ class NpcProcess:
             crisis = self.physiology.crisis()
             if crisis:
                 await self._resolve_crisis(crisis, data)
-                return
+                # Continue with rest of cycle instead of returning early
+                # Prioritize movement back to scheduled scene after crisis resolved
 
         # ── Perceive environment ──
         perception = await self._perception.perceive(
@@ -428,6 +432,12 @@ class NpcProcess:
             game_time=data,
             weather=self._weather,
         )
+
+        # ── Passive social recovery (being around people) ──
+        if self.physiology and not self.physiology.is_dead:
+            if perception and len(perception.npcs_present) > 0:
+                # Social recovery from being around other NPCs: 3 per tick (15 game min)
+                self.physiology.recover("social", 3)
 
         # ── Inner thought (rare, only when idle, with LLM failure backoff) ──
         ticks_since_last = self._tick_counter - self._last_inner_thought_tick
@@ -465,7 +475,23 @@ class NpcProcess:
             await self._check_intimate_actions(data, perception)
 
         # ── Brain decision for movement / player interaction ──
-        decision = self.brain.decide(data, perception)
+        # Skip movement decisions for one cycle after crisis resolution
+        if getattr(self, '_crisis_resolved_this_tick', False):
+            self._crisis_resolved_this_tick = False
+            # Still allow player interaction but skip movement
+            if perception and perception.players_present:
+                min_decision = {"action": "idle", "scene_id": None, "activity": self.npc_data.get("current_activity", ""),
+                               "social_target": None, "reason": "post_crisis_settle"}
+                if self.brain:
+                    player_intent = self.brain._generate_player_intent(perception)
+                    if player_intent:
+                        min_decision = player_intent
+                decision = min_decision
+            else:
+                decision = {"action": "idle", "scene_id": None, "activity": self.npc_data.get("current_activity", ""),
+                           "social_target": None, "reason": "post_crisis_settle"}
+        else:
+            decision = self.brain.decide(data, perception)
 
         if decision["action"] == "move" and decision["scene_id"]:
             self._update_scene(decision["scene_id"])
@@ -569,10 +595,10 @@ class NpcProcess:
 
     async def _resolve_crisis(self, crisis: str, data: dict):
         """Move NPC to a scene that satisfies the crisis need. Pure rules.
-
         Priority: home scene > public scene with facility.
-        When at home, uses appropriate items with contextual activity text.
-        """
+        Recovery happens immediately upon deciding what to do.
+        After crisis resolution, marks flag so _autonomous_cycle skips movement for 1 tick."""
+        self._crisis_resolved_this_tick = True
         current_scene = self.npc_data.get("current_scene_id", "")
         home_id = self._home_scene_id
 
@@ -587,7 +613,6 @@ class NpcProcess:
                 logger.info(f"NPC {self.npc_data['name']}: crisis=energy, already home, sleeping in {room_name}")
                 await self._publish_state()
                 self.physiology.recover("energy", 70)
-                return
             else:
                 # Go home to sleep
                 logger.info(f"NPC {self.npc_data['name']}: crisis=energy, going home {home_id}")
@@ -599,7 +624,7 @@ class NpcProcess:
                     "reason": "crisis_energy",
                 })
                 self.physiology.recover("energy", 70)
-                return
+            return  # Energy handled, no further fallback needed
 
         # ── Hunger / thirst at home: use kitchen items ──
         if crisis in ("hunger", "thirst") and home_id and current_scene == home_id:
@@ -612,7 +637,6 @@ class NpcProcess:
                 self.physiology.recover("hunger", 60)
                 self.physiology.recover("thirst", 20)
                 logger.info(f"NPC {self.npc_data['name']}: crisis=hunger, cooking in {room_name}")
-                return
             else:
                 kitchen = self._find_room_by_function(home_id, "drink")
                 room_name = kitchen["name"] if kitchen else "厨房"
@@ -621,11 +645,11 @@ class NpcProcess:
                 await self._publish_state()
                 self.physiology.recover("thirst", 60)
                 logger.info(f"NPC {self.npc_data['name']}: crisis=thirst, drinking in {room_name}")
-                return
+            return  # Home handled, no further fallback needed
 
-        # ── Fallback: find public scene with required facility ──
-        facility_map = {"hunger": "has_food", "thirst": "has_water", "energy": "safe_sleep"}
-        needed = facility_map.get(crisis, "has_water")
+        # ── Fallback: find scene with items that satisfy the need ──
+        need_funcs = {"hunger": ["eat", "cook"], "thirst": ["drink"], "energy": ["sleep"]}
+        needed_funcs = need_funcs.get(crisis, ["drink"])
 
         candidates = []
         for sid in self._all_scene_ids:
@@ -633,23 +657,28 @@ class NpcProcess:
                 continue
             conn = get_connection()
             try:
-                row = fetch_one(conn, "SELECT scene_type FROM scene WHERE id = ?", (sid,))
-                if row and scene_has(row["scene_type"], needed):
+                func_pattern = " OR ".join([f"function LIKE '%,{f},%' OR function LIKE '{f},%' OR function LIKE '%,{f}' OR function = '{f}'" for f in needed_funcs])
+                row = fetch_one(conn, f"SELECT 1 FROM item WHERE scene_id = ? AND ({func_pattern}) LIMIT 1", (sid,))
+                if row:
                     candidates.append(sid)
             finally:
                 conn.close()
 
+        # Fallback: try home scene if no public scene found
+        if not candidates and self._home_scene_id and self._home_scene_id != current_scene:
+            candidates = [self._home_scene_id]
+
         if not candidates:
-            logger.warning(f"NPC {self.npc_data['name']}: no scene with {needed} found!")
+            logger.warning(f"NPC {self.npc_data['name']}: crisis={crisis}, no scene with {needed_funcs} items found!")
             return
 
         target = random.choice(candidates)
-        logger.info(f"NPC {self.npc_data['name']}: crisis={crisis}, moving to {target} for {needed}")
+        logger.info(f"NPC {self.npc_data['name']}: crisis={crisis}, moving to {target} for {needed_funcs}")
         self._update_scene(target)
         await self.broker.publish("npc_movement", {
             "npc_id": self.npc_id,
             "scene_id": target,
-            "activity": f"解决{needed}需求",
+            "activity": f"解决{crisis}需求",
             "reason": f"crisis_{crisis}",
         })
         if crisis == "hunger":
@@ -1710,6 +1739,19 @@ class NpcProcess:
             conn.close()
         logger.info(f"NPC {self.npc_data['name']}: moved from {old_scene} to {new_scene_id}")
 
+    def _persist_death(self):
+        """Save NPC death state to database."""
+        try:
+            conn = get_connection()
+            execute(conn,
+                "UPDATE npc SET is_dead = 1, death_cause = ?, updated_at = datetime('now') WHERE id = ?",
+                (self.physiology.death_cause, self.npc_id))
+            conn.commit()
+            conn.close()
+            logger.info(f"NPC {self.npc_data['name']}: death persisted to DB")
+        except Exception as e:
+            logger.error(f"NPC {self.npc_data['name']}: failed to persist death: {e}")
+
     async def _publish_state(self):
         """Publish NPC state to Redis."""
         current_scene_id = self.npc_data.get("current_scene_id", "")
@@ -1725,6 +1767,13 @@ class NpcProcess:
             "name": self.npc_data["name"],
             "mood": self.mood_mgr.current,
             "mood_intensity": self.mood_mgr._intensity,
+            "physiology": {
+                "hunger": round(self.physiology.hunger, 1) if self.physiology else 0,
+                "thirst": round(self.physiology.thirst, 1) if self.physiology else 0,
+                "energy": round(self.physiology.energy, 1) if self.physiology else 0,
+                "social": round(self.physiology.social, 1) if self.physiology else 0,
+                "hp": round(self.physiology.hp, 1) if self.physiology else 0,
+            } if self.physiology else None,
             "current_scene": current_scene_id,
             "current_scene_name": self._scene_name,
             "scene_type": self._scene_type,
