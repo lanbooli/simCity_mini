@@ -176,9 +176,9 @@ class TTSGateway:
                             await self._redis.xgroup_delconsumer(REQUEST_STREAM, CONSUMER_GROUP, c["name"])
                             logger.info(f"Cleaned idle consumer: {c['name']}")
                         except Exception as e:
-                logger.warning(f"TTS health report failed: {e}")
+                            logger.warning(f"TTS idle consumer cleanup failed: {e}")
             except Exception as e:
-                logger.warning(f"TTS health report failed: {e}")
+                logger.warning(f"TTS consumer cleanup failed: {e}")
             await self._redis.aclose()
             self._redis = None
         self._model = None
@@ -243,11 +243,11 @@ class TTSGateway:
                         await self._redis.xgroup_delconsumer(REQUEST_STREAM, CONSUMER_GROUP, c["name"])
                         cleaned += 1
                     except Exception as e:
-                logger.warning(f"TTS health report failed: {e}")
+                        logger.warning(f"TTS stale consumer cleanup failed: {e}")
             if cleaned:
                 logger.info(f"Cleaned {cleaned} stale consumer(s) at startup")
         except Exception as e:
-                logger.warning(f"TTS health report failed: {e}")
+            logger.warning(f"TTS startup cleanup failed: {e}")
 
     async def _claim_pending(self, consumer_name: str):
         """Claim and reprocess pending messages left by previous instances."""
@@ -292,7 +292,7 @@ class TTSGateway:
                 try:
                     await self._redis.xack(REQUEST_STREAM, CONSUMER_GROUP, msg_id)
                 except Exception as e:
-                logger.warning(f"TTS health report failed: {e}")
+                    logger.warning(f"TTS stream ack failed: {e}")
 
     async def _process_request(self, msg_id: bytes, fields: dict):
         req_id = fields.get(b"request_id", fields.get("request_id", "?")).decode() if isinstance(fields.get(b"request_id"), bytes) else fields.get("request_id", "?")
