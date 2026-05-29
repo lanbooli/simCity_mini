@@ -282,6 +282,7 @@ const PlayerSettings = {
       const playerId = Store.get('playerId');
       const updated = await API.updatePlayer(playerId, data);
       this._playerData = updated;
+      Store.set('playerData', updated);
       this._renderDetail();
       btn.textContent = '✓ 已保存';
       setTimeout(() => {
