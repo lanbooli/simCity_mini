@@ -441,11 +441,14 @@ class Supervisor:
         env["TTS_CLEANUP_AGE_HOURS"] = str(settings.tts_cleanup_age_hours)
         env["REDIS_URL"] = settings.redis_url
 
+        log_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "logs")
+        os.makedirs(log_dir, exist_ok=True)
+        log_file = open(os.path.join(log_dir, "tts_gateway.log"), "a", buffering=1)
         cmd = [settings.tts_python_path, "-m", "src.llm.tts_gateway"]
         proc = subprocess.Popen(
             cmd,
             env=env,
-            stdout=subprocess.PIPE,
+            stdout=log_file,
             stderr=subprocess.STDOUT,
             text=True,
         )
@@ -462,10 +465,13 @@ class Supervisor:
         env["PYTHONPATH"] = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
         cmd = [sys.executable, "-m", config["module"]] + config.get("args", [])
+        log_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "logs")
+        os.makedirs(log_dir, exist_ok=True)
+        log_file = open(os.path.join(log_dir, f"{name}.log"), "a", buffering=1)
         proc = subprocess.Popen(
             cmd,
             env=env,
-            stdout=subprocess.PIPE,
+            stdout=log_file,
             stderr=subprocess.STDOUT,
             text=True,
         )
@@ -483,13 +489,24 @@ class Supervisor:
                     rc = proc.poll()
                     if rc is not None:
                         print(f"[{name}] Process exited with code {rc} (PID {proc.pid}).")
-                        # Read last log output for diagnostics
-                        try:
-                            stdout_data = proc.stdout.read()
-                            if stdout_data:
-                                print(f"[{name}] Last output:\n{stdout_data[-500:]}")
-                        except Exception:
-                            pass
+                        # Read last log from file for diagnostics
+                        log_path = os.path.join(
+                            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                            "logs", f"{name}.log"
+                        )
+                        if os.path.exists(log_path):
+                            try:
+                                with open(log_path, "r") as lf:
+                                    lf.seek(0, 2)
+                                    size = lf.tell()
+                                    if size > 500:
+                                        lf.seek(max(0, size - 500))
+                                    else:
+                                        lf.seek(0)
+                                    last = lf.read()
+                                print(f"[{name}] Last log output:\n{last}")
+                            except Exception:
+                                pass
 
                         if not self._can_restart(name):
                             print(f"[{name}] Removing from watch list.")

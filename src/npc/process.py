@@ -1994,8 +1994,8 @@ class NpcProcess:
                             "mood": self.npc_data.get("current_mood", "neutral"),
                         },
                     )
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.warning(f"NPC health report failed: {e}")
 
     async def shutdown(self):
         logger.info(f"NPC {self.npc_data.get('name', self.npc_id)} shutting down...")

@@ -111,8 +111,8 @@ class PlayerProcess:
                         f"player:{self.player_id}",
                         status="alive",
                     )
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.warning(f"Player health report failed: {e}")
 
     async def shutdown(self):
         logger.info("Player process shutting down...")

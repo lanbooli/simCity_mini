@@ -94,8 +94,8 @@ class SystemProcess:
                         status="alive",
                         extra={"tick": self._tick_count},
                     )
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.warning(f"System health report failed: {e}")
             await self.time_mgr.run_tick()
             self._tick_count += 1
 
