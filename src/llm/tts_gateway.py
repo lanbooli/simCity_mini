@@ -175,10 +175,10 @@ class TTSGateway:
                         try:
                             await self._redis.xgroup_delconsumer(REQUEST_STREAM, CONSUMER_GROUP, c["name"])
                             logger.info(f"Cleaned idle consumer: {c['name']}")
-                        except Exception:
-                            pass
-            except Exception:
-                pass
+                        except Exception as e:
+                logger.warning(f"TTS health report failed: {e}")
+            except Exception as e:
+                logger.warning(f"TTS health report failed: {e}")
             await self._redis.aclose()
             self._redis = None
         self._model = None
@@ -242,12 +242,12 @@ class TTSGateway:
                     try:
                         await self._redis.xgroup_delconsumer(REQUEST_STREAM, CONSUMER_GROUP, c["name"])
                         cleaned += 1
-                    except Exception:
-                        pass
+                    except Exception as e:
+                logger.warning(f"TTS health report failed: {e}")
             if cleaned:
                 logger.info(f"Cleaned {cleaned} stale consumer(s) at startup")
-        except Exception:
-            pass
+        except Exception as e:
+                logger.warning(f"TTS health report failed: {e}")
 
     async def _claim_pending(self, consumer_name: str):
         """Claim and reprocess pending messages left by previous instances."""
@@ -291,8 +291,8 @@ class TTSGateway:
             finally:
                 try:
                     await self._redis.xack(REQUEST_STREAM, CONSUMER_GROUP, msg_id)
-                except Exception:
-                    pass
+                except Exception as e:
+                logger.warning(f"TTS health report failed: {e}")
 
     async def _process_request(self, msg_id: bytes, fields: dict):
         req_id = fields.get(b"request_id", fields.get("request_id", "?")).decode() if isinstance(fields.get(b"request_id"), bytes) else fields.get("request_id", "?")
@@ -552,8 +552,8 @@ class TTSGateway:
                         "queue_size": len(getattr(self, "_pending_requests", [])),
                     }),
                 )
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning(f"TTS health report failed: {e}")
 
     async def _cleanup_loop(self):
         """Periodically clean old audio files and stale consumers."""

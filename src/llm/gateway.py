@@ -458,14 +458,9 @@ class Gateway:
             )
 
     async def _stats_reporter(self):
-        """Periodic stats reporting and health check."""
+        """Periodic stats reporting and health check with retry on failure."""
         broker = None
-        try:
-            from src.common.message_broker import RedisBroker
-            broker = RedisBroker()
-            await broker.connect()
-        except Exception:
-            pass
+        _reconnect = True
         while self._running:
             await asyncio.sleep(60)
             now = time.monotonic()
@@ -478,6 +473,21 @@ class Gateway:
                 f"rate={rate:.1f}/s circuit={self._cb.state} "
                 f"player_q={self._player_queue.qsize()} npc_q={self._npc_queue.qsize()}"
             )
+            # Try to connect/reconnect broker
+            if broker is None or _reconnect:
+                try:
+                    from src.common.message_broker import RedisBroker
+                    if broker:
+                        await broker.disconnect()
+                    broker = RedisBroker()
+                    await broker.connect()
+                    _reconnect = False
+                except Exception as e:
+                    logger.warning(f"Health broker connect failed: {e}")
+                    broker = None
+                    self._stats["last_report"] = now
+                    continue
+            # Report health
             if broker:
                 try:
                     await broker.report_health(
@@ -489,8 +499,9 @@ class Gateway:
                             "circuit": self._cb.state,
                         },
                     )
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.warning(f"Health report failed (will retry): {e}")
+                    _reconnect = True
             self._stats["last_report"] = now
 
 

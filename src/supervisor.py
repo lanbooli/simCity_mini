@@ -279,7 +279,7 @@ class Supervisor:
 
     def _health_monitor_loop(self):
         """Background thread: check process health via Redis, restart stale ones."""
-        HEALTH_TIMEOUT = 60  # seconds: if no health report within this time, consider hung
+        HEALTH_TIMEOUT = 120  # seconds: if no health report within this time, consider hung
         CHECK_INTERVAL = 20  # seconds between checks
         
         # Map process names used in health reports to supervisor child names
