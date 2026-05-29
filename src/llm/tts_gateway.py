@@ -539,21 +539,26 @@ class TTSGateway:
     async def _health_loop(self):
         """Periodically report health to Redis."""
         import time as _time
+        logger.info("TTS health loop started (interval=15s)")
         while self._running:
-            await asyncio.sleep(15)
             try:
+                ts = _time.time()
                 await self._redis.set(
                     f"health:tts",
                     json.dumps({
                         "name": "tts_gateway",
                         "status": "alive",
                         "pid": os.getpid(),
-                        "timestamp": _time.time(),
+                        "timestamp": ts,
                         "queue_size": len(getattr(self, "_pending_requests", [])),
                     }),
                 )
+            except asyncio.CancelledError:
+                break
             except Exception as e:
                 logger.warning(f"TTS health report failed: {e}")
+            await asyncio.sleep(15)
+        logger.warning("TTS health loop exited")
 
     async def _cleanup_loop(self):
         """Periodically clean old audio files and stale consumers."""
