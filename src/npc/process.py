@@ -1765,6 +1765,10 @@ class NpcProcess:
         clean_text = re.sub(r"\[\[.*?\]\]", "", text).strip()
         if not clean_text:
             return
+        # Prepend narrator intro: "（XXX说：）"
+        npc_name = self.npc_data.get("name", "")
+        if npc_name:
+            clean_text = f"（{npc_name}说：）{clean_text}"
         # Parse into segments
         segments = parse_stage_and_dialogue(clean_text)
         if not segments:
