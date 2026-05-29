@@ -528,7 +528,8 @@ class DialogueHandler:
         # Format player identity for prompt
         p_gender, p_age, p_appearance, p_personality, p_role = self._format_player_info(player_data)
 
-        # Build action system prompt
+        # Build action system prompt with interaction context
+        interaction_ctx = self.interaction_ctx.get_full_context()
         system_template = Template(NPC_ACTION_SYSTEM)
         system_msg = system_template.render(
             npc=self.npc,
@@ -551,6 +552,7 @@ class DialogueHandler:
             action_success=action_success,
             action_result=action_result,
             base_delta=base_delta,
+            interaction_context=interaction_ctx,
         )
 
         # Build messages
@@ -707,6 +709,7 @@ class DialogueHandler:
         """Generate narrative for NPC-initiated action toward a target."""
         rel = self.relationship_mgr.get_or_create_relation(target_id, "player")
         p_gender, p_age, p_appearance, p_personality, p_role = self._format_player_info(player_data)
+        interaction_ctx = self.interaction_ctx.get_full_context()
         system_template = Template(NPC_ACTION_NARRATIVE)
         system_msg = system_template.render(
             npc=self.npc, target_name=target_name,
@@ -719,6 +722,7 @@ class DialogueHandler:
             player_appearance=p_appearance,
             player_personality=p_personality,
             player_role=p_role,
+            interaction_context=interaction_ctx,
         )
         return await self._simple_llm_call(system_msg, f"对{target_name}做{action_name}", max_tokens=512, call_type="action_narrative")
 

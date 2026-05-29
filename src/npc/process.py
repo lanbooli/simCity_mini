@@ -439,6 +439,10 @@ class NpcProcess:
                 # Social recovery from being around other NPCs: 3 per tick (15 game min)
                 self.physiology.recover("social", 3)
 
+        # ── Decay interaction context (physical states) ──
+        if hasattr(self, 'dialogue_handler') and self.dialogue_handler:
+            self.dialogue_handler.interaction_ctx.tick(15)
+
         # ── Inner thought (rare, only when idle, with LLM failure backoff) ──
         ticks_since_last = self._tick_counter - self._last_inner_thought_tick
         if (self._tick_counter % 5 == 0 and random.random() < 0.01
