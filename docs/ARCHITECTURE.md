@@ -11,7 +11,7 @@
      │       │        │        │
      ▼       ▼        ▼        ▼
 ┌─────────┐ ┌──────┐ ┌──────┐ ┌──────────────────┐
-│ System  │ │Player│ │ API  │ │ NPC × 18         │
+│ System  │ │Player│ │ API  │ │ NPC × 19         │
 │ Process │ │Process│ │Server│ │ (独立进程)        │
 └────┬────┘ └──┬───┘ └──┬───┘ └───────┬──────────┘
      │         │        │             │
@@ -146,3 +146,49 @@ dislike(-1) → enemy(-2)   (负面路径)
 - 响应式状态管理 (`Store` 模式，发布/订阅)
 - WebSocket 实时接收时间/天气/NPC 状态/社交事件
 - 管理面板 (`Ctrl+Shift+M`) 用于调试
+
+
+## 新增系统（v0.3.0）
+
+### 生理系统
+```
+PhysiologyManager (纯规则,不消耗LLM)
+├── tick(delta_hours) → 4属性衰减
+├── crisis() → 返回优先级最高的危机 (thirst > hunger > energy)
+├── recover(stat, amount) → 恢复属性
+├── daily_check() → 年龄+1, 老人死亡概率
+└── 死亡 → _persist_death() → SQLite
+```
+
+### 互动系统
+```
+玩家动作 → respond_to_action()
+           ├── InteractionContext.add_action() → 记录状态
+           ├── NPC_ACTION_SYSTEM prompt ← interaction_context
+           └── LLM生成回复（知道当前肢体状态）
+
+NPC主动亲密 → IntimacyEngine.check_actions()
+              ├── 29种动作 × 概率（状态驱动）
+              ├── _STATE_BOOST/_STATE_SUPPRESS → 链式触发
+              └── _execute_intimate_action()
+                  ├── LLM叙事
+                  └── InteractionContext.add_action()
+```
+
+### 通勤系统
+```
+_start_travel(target, room)
+  → 查 config/scene_distances.json
+  → _is_traveling = True
+  → _travel_remaining = N game minutes
+  → 每游戏分钟递减
+  → 通勤中: 不社交/不互动/不显示
+  → _on_arrive() → 正常恢复
+```
+
+### 场所20个（最新）
+```
+☕ cafe | 🌳 outdoor | 🏫 school | 📚 library | 🛒 market | 🏥 hospital
+🍽️ restaurant | 🍺 bar | 💪 gym | 🎬 cinema | 👗 shop | 🚉 outdoor
+🌊 outdoor | 🏛️ office | 🎮 arcade | 🏠 home×5
+```

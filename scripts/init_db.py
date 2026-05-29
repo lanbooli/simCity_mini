@@ -147,6 +147,28 @@ def seed_data(conn):
         ("item_hospital_vending", "scene_hospital", None, "自动售货机", "有零食和饮料", "furniture", "eat,drink", None, True, True),
         ("item_hospital_water", "scene_hospital", None, "饮水机", "提供热水和冷水", "furniture", "drink", None, True, True),
         ("item_library_vending", "scene_library", None, "自动售货机", "有饮料和零食", "furniture", "eat,drink", None, True, True),
+        # New scene items (Phase: town expansion)
+        ("item_restaurant_table", "scene_restaurant", None, "餐桌", "铺着格子桌布的木餐桌", "furniture", "eat", None, True, True),
+        ("item_restaurant_kitchen", "scene_restaurant", None, "厨房", "忙碌的餐厅厨房，飘出诱人的香味", "furniture", "cook", None, True, True),
+        ("item_restaurant_bar", "scene_restaurant", None, "吧台", "提供各种饮品", "furniture", "drink", None, True, True),
+        ("item_bar_counter", "scene_bar", None, "吧台", "供应鸡尾酒和啤酒的长吧台", "furniture", "drink", None, True, True),
+        ("item_bar_booth", "scene_bar", None, "卡座", "舒适的皮质卡座", "furniture", "rest", None, True, True),
+        ("item_bar_jukebox", "scene_bar", None, "点唱机", "老式的点唱机，可以选歌", "electronics", "entertain", None, True, True),
+        ("item_gym_treadmill", "scene_gym", None, "跑步机", "进口的电动跑步机", "equipment", "exercise", None, True, True),
+        ("item_gym_dumbbell", "scene_gym", None, "哑铃区", "整套哑铃和杠铃", "equipment", "exercise", None, True, True),
+        ("item_gym_water", "scene_gym", None, "饮水机", "健身房的饮水机", "furniture", "drink", None, True, True),
+        ("item_cinema_screen", "scene_cinema", None, "放映厅", "大银幕放映厅，环绕音响", "furniture", "entertain", None, True, True),
+        ("item_cinema_snacks", "scene_cinema", None, "零食柜台", "爆米花和可乐", "furniture", "eat", None, True, True),
+        ("item_clothing_rack", "scene_clothing", None, "服装展示架", "挂着当季新款", "furniture", "store", None, True, False),
+        ("item_clothing_mirror", "scene_clothing", None, "试衣镜", "落地试衣镜", "furniture", "decorate", None, True, False),
+        ("item_station_bench", "scene_station", None, "候车长椅", "遮阳棚下的金属长椅", "furniture", "rest", None, True, True),
+        ("item_station_vending", "scene_station", None, "自动售货机", "卖饮料和零食", "furniture", "eat,drink", None, True, True),
+        ("item_riverside_bench", "scene_riverside", None, "河边长椅", "面对河景的木质长椅", "furniture", "rest", None, True, True),
+        ("item_riverside_vendor", "scene_riverside", None, "小吃摊", "卖烤红薯和糖葫芦", "furniture", "eat,cook,drink", None, True, True),
+        ("item_office_desk", "scene_office", None, "办公桌", "政府工作人员的办公位", "furniture", "work", None, True, True),
+        ("item_office_water", "scene_office", None, "饮水机", "公共饮水机", "furniture", "drink", None, True, True),
+        ("item_arcade_cabinet", "scene_arcade", None, "街机", "经典格斗游戏街机", "electronics", "entertain", None, True, True),
+        ("item_arcade_snacks", "scene_arcade", None, "零食柜", "薯片和汽水", "furniture", "eat", None, True, True),
     ]
     for item in items:
         execute(c, """INSERT OR REPLACE INTO item(id, scene_id, owner_npc_id, name, description, item_type, function, room_name, is_interactive, is_usable)

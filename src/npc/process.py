@@ -76,6 +76,15 @@ class NpcProcess:
         self._player_together_ticks: int = 0
         self._last_player_id: str = ""
         self._tasks: list[asyncio.Task] = []
+        # Travel system
+        self._is_traveling: bool = False
+        self._travel_remaining: float = 0.0  # game minutes until arrival
+        self._travel_target: str = ""
+        self._travel_room: str = ""
+        self._travel_activity: str = ""
+        self._travel_reason: str = ""
+        self._has_bike: bool = False  # NPCs with bike travel at 0.5x time
+        self._distance_cache: dict = {}
 
     async def start(self):
         logger.info(f"NPC process starting: {self.npc_id}")
@@ -86,6 +95,13 @@ class NpcProcess:
 
         # Initialize physiology
         self.physiology = PhysiologyManager(self.npc_data)
+
+        # Check if NPC has bike (from attributes)
+        attrs = self.npc_data.get("attributes", "{}")
+        if isinstance(attrs, str):
+            import json
+            attrs = json.loads(attrs)
+        self._has_bike = attrs.get("has_bike", False)
         self._load_npc_data()
         await self._catch_up_schedule()
 
@@ -140,6 +156,7 @@ class NpcProcess:
             scene_name=self._scene_name,
             game_hour=self._game_time.get("hour", 12),
             npc_energy=self.physiology.energy if self.physiology else 50.0,
+            interaction_ctx=self.dialogue_handler.interaction_ctx if self.dialogue_handler else None,
         )
 
         self.social_feed_mgr = SocialFeedManager(self.npc_id, self.npc_data)
@@ -211,6 +228,25 @@ class NpcProcess:
         self._crisis_resolved_this_tick = False
         self._tick_counter += 1
 
+        # Travel tick: count down and handle arrival
+        if self._is_traveling and self._travel_remaining > 0:
+            self._travel_remaining -= 1
+            if self._travel_remaining <= 0:
+                arrival = self._on_arrive()
+                await self.broker.publish("npc_movement", {
+                    "npc_id": self.npc_id,
+                    "scene_id": arrival["scene_id"],
+                    "room_name": arrival["room_name"],
+                    "activity": arrival["activity"],
+                    "reason": arrival["reason"],
+                })
+                await self._publish_state()
+                # Don't return - allow full cycle now that we've arrived
+            else:
+                if data.get("minute", 0) % 15 == 0:
+                    await self._publish_state()
+                return  # Still traveling, skip everything else
+
         # Decrement cooldowns
         if self._social_cooldown > 0:
             self._social_cooldown -= 1
@@ -260,7 +296,7 @@ class NpcProcess:
                     return
 
         # Run autonomous decision (every ~15 game minutes)
-        if data.get("minute", 0) % 15 == 0 and not self._in_dialogue_with:
+        if data.get("minute", 0) % 15 == 0 and not self._in_dialogue_with and not self._is_traveling:
             await self._autonomous_cycle(data)
 
     async def _on_weather_update(self, data: dict):
@@ -475,10 +511,12 @@ class NpcProcess:
             await self._select_and_broadcast_auto_action(data, perception)
 
         # ── Intimate action check (personality-driven NPC→player) ──
+        intimate_fired = False
         if self._intimacy_engine:
-            await self._check_intimate_actions(data, perception)
+            intimate_fired = await self._check_intimate_actions(data, perception)
 
         # ── Brain decision for movement / player interaction ──
+        # Skip brain player actions if intimacy engine just fired (avoid double-action)
         # Skip movement decisions for one cycle after crisis resolution
         if getattr(self, '_crisis_resolved_this_tick', False):
             self._crisis_resolved_this_tick = False
@@ -498,18 +536,10 @@ class NpcProcess:
             decision = self.brain.decide(data, perception)
 
         if decision["action"] == "move" and decision["scene_id"]:
-            # For schedule-based moves, derive room from activity (e.g. "回家休息" → "客厅")
             room_name = decision.get("room_name", "")
             if not room_name and decision["scene_id"] == self._home_scene_id:
-                room_name = "客厅"  # Default room when going home
-            self._update_scene(decision["scene_id"], room_name)
-            await self.broker.publish("npc_movement", {
-                "npc_id": self.npc_id,
-                "scene_id": decision["scene_id"],
-                "room_name": room_name,
-                "activity": decision["activity"],
-                "reason": decision["reason"],
-            })
+                room_name = "客厅"
+            self._start_travel(decision["scene_id"], room_name, decision["activity"], decision["reason"])
             await self._publish_state()
 
         elif decision.get("action") == "greet_player":
@@ -630,14 +660,7 @@ class NpcProcess:
             else:
                 # Go home to sleep
                 logger.info(f"NPC {self.npc_data['name']}: crisis=energy, going home, room={room_name}")
-                self._update_scene(home_id, room_name)
-                await self.broker.publish("npc_movement", {
-                    "npc_id": self.npc_id,
-                    "scene_id": home_id,
-                    "room_name": room_name,
-                    "activity": activity,
-                    "reason": "crisis_energy",
-                })
+                self._start_travel(home_id, room_name, activity, "crisis_energy")
                 self.physiology.recover("energy", 70)
             return
 
@@ -716,6 +739,57 @@ class NpcProcess:
             self.physiology.recover("thirst", 60)
         elif crisis == "energy":
             self.physiology.recover("energy", 70)
+
+    # ── Travel system ─────────────────────────────────
+
+    def _load_distance(self, from_scene: str, to_scene: str) -> float:
+        """Get walking distance between two scenes in game minutes."""
+        if not self._distance_cache:
+            import json, os
+            try:
+                config_dir = os.path.join(
+                    os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "config")
+                with open(os.path.join(config_dir, "scene_distances.json"), "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    self._distance_cache = data.get("walk_minutes", {})
+            except Exception:
+                self._distance_cache = {}
+        minutes = self._distance_cache.get(from_scene, {}).get(to_scene, 10)
+        # Check bike attribute
+        if self._has_bike:
+            minutes *= 0.5
+        return max(minutes, 1.0)
+
+    def _start_travel(self, target_scene: str, room_name: str = "", activity: str = "", reason: str = ""):
+        """Start traveling from current scene to target. NPC disappears during travel."""
+        current_scene = self.npc_data.get("current_scene_id", "")
+        if current_scene == target_scene:
+            # Same scene, just update room
+            self._update_scene(target_scene, room_name)
+            return
+        distance = self._load_distance(current_scene, target_scene)
+        self._is_traveling = True
+        self._travel_remaining = distance
+        self._travel_target = target_scene
+        self._travel_room = room_name
+        self._travel_activity = activity
+        self._travel_reason = reason
+        # Update brain to know we're going (but not there yet)
+        self.npc_data["current_activity"] = f"前往{target_scene}"
+        logger.info(f"NPC {self.npc_data['name']}: traveling from {current_scene} to {target_scene} "
+                   f"({distance:.0f} game min{' by bike' if self._has_bike else ' walking'})")
+
+    def _on_arrive(self):
+        """Called when NPC reaches destination. Updates scene and publishes."""
+        self._is_traveling = False
+        self._update_scene(self._travel_target, self._travel_room)
+        logger.info(f"NPC {self.npc_data['name']}: arrived at {self._travel_target}")
+        return {
+            "scene_id": self._travel_target,
+            "room_name": self._travel_room,
+            "activity": self._travel_activity,
+            "reason": self._travel_reason,
+        }
 
     def _find_room_by_function(self, scene_id: str, func: str) -> dict | None:
         """Find a room in a home scene whose items support the given function.
@@ -1041,6 +1115,7 @@ class NpcProcess:
 
     # ── Intimate action descriptions for LLM narrative ──────
     _INTIMATE_ACTION_DESCS = {
+        # Original
         "feed_partner": "温柔地给玩家喂饭",
         "wipe_mouth": "帮玩家擦嘴",
         "fix_collar": "帮玩家整理衣领",
@@ -1053,18 +1128,46 @@ class NpcProcess:
         "give_gift": "送给玩家一个小礼物",
         "blow_dry_hair": "帮玩家吹头发",
         "watch_tv_together": "邀请玩家一起看电视",
+        # New physical intimacy
+        "stand_close": "靠近玩家身旁",
+        "cheek_kiss": "在玩家脸颊上亲了一下",
+        "kiss": "温柔地亲吻玩家",
+        "sweet_talk": "对玩家说甜甜的情话",
+        "goodbye_kiss": "在玩家出门前亲了一下",
+        # New affectionate/romantic
+        "head_pat": "轻轻摸了摸玩家的头",
+        "back_hug": "从背后温柔地抱住玩家",
+        "forehead_kiss": "在玩家额头上轻轻亲了一下",
+        "playful_punch": "假装生气地轻捶了玩家一下",
+        "pull_sleeve": "害羞地拉了拉玩家的衣角",
+        "fix_hair": "温柔地帮玩家整理被吹乱的头发",
+        "arm_in_arm": "自然地挽起玩家的手臂",
+        "whisper": "靠近玩家耳边轻声低语",
+        "cover_blanket": "看到玩家累了，轻轻给玩家盖上毯子",
+        "bring_tea": "给玩家端来一杯热茶",
+        "share_snack": "把手里的零食分给玩家",
+        "cuddle": "依偎到玩家身边",
     }
 
     # ── Intimate action favorability deltas ──────
     _INTIMATE_FAV_DELTAS = {
+        # Original
         "feed_partner": 3, "wipe_mouth": 2, "fix_collar": 2,
         "tie_apron": 2, "lean_on_shoulder": 3, "hold_hands_walk": 2,
         "sudden_hug": 3, "ask_for_hug": 2, "cook_for_player": 4,
         "give_gift": 5, "blow_dry_hair": 3, "watch_tv_together": 2,
+        # New
+        "stand_close": 1, "cheek_kiss": 3, "kiss": 4,
+        "sweet_talk": 2, "goodbye_kiss": 3,
+        "head_pat": 2, "back_hug": 3, "forehead_kiss": 4,
+        "playful_punch": 1, "pull_sleeve": 1, "fix_hair": 2,
+        "arm_in_arm": 2, "whisper": 2, "cover_blanket": 2,
+        "bring_tea": 2, "share_snack": 1, "cuddle": 3,
     }
 
-    async def _check_intimate_actions(self, data: dict, perception):
-        """Check and potentially trigger NPC→player intimate actions."""
+    async def _check_intimate_actions(self, data: dict, perception) -> bool:
+        """Check and potentially trigger NPC→player intimate actions.
+        Returns True if an action was executed."""
         player = perception.players_present[0] if perception.players_present else None
 
         # Update engine state each cycle
@@ -1090,7 +1193,7 @@ class NpcProcess:
 
         # Check intimate actions when player present and NPC not in dialogue
         if not player or self._in_dialogue_with:
-            return
+            return False
 
         is_weekend = data.get("day", 1) % 7 in (6, 0)
         together_minutes = self._player_together_ticks * 15
@@ -1108,6 +1211,8 @@ class NpcProcess:
 
         if result:
             await self._execute_intimate_action(result, player)
+            return True
+        return False
 
     async def _execute_intimate_action(self, result: dict, player):
         """Execute an NPC→player intimate action with LLM narrative."""
@@ -1147,6 +1252,12 @@ class NpcProcess:
         self.relationship_mgr.update_interaction(player.id, llm_fav, other_type="player")
         self.mood_mgr.affect(llm_fav)
         self._action_cooldowns[action_name] = 60
+
+        # Record in interaction context for continuity
+        if hasattr(self, 'dialogue_handler') and self.dialogue_handler:
+            self.dialogue_handler.interaction_ctx.add_action(
+                action_name, action_desc, narrative.get("content", "")
+            )
 
         self.memory_mgr.add(
             content=f"主动对{player.name}做了亲密动作{action_desc}: {narrative['content'][:100]}",
@@ -1746,8 +1857,8 @@ class NpcProcess:
                 room_name = "客厅"
                 if target == self._home_scene_id:
                     room_name = "客厅"
+                # For catch-up on startup, arrive instantly (already "should" be there)
                 self._update_scene(target, room_name)
-                # Update scene_npc table and Redis scene lists
                 try:
                     await self.broker.publish("npc_movement", {
                         "npc_id": self.npc_id,
@@ -1837,6 +1948,9 @@ class NpcProcess:
             "in_dialogue": bool(self._in_dialogue_with),
             "is_dead": self.physiology.is_dead if self.physiology else False,
             "death_cause": self.physiology.death_cause if self.physiology else "",
+            "is_traveling": self._is_traveling,
+            "travel_target": self._travel_target,
+            "travel_remaining": round(self._travel_remaining, 1) if self._is_traveling else 0,
         }
         if self.physiology:
             state["physiology"] = {

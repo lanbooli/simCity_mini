@@ -114,7 +114,7 @@ scenes:
   - id: "scene_coffee_shop"
     name: "阳光咖啡店"
     description: "一家温馨的街角咖啡店，飘着咖啡豆的香气，阳光透过落地窗洒在木质地板上。"
-    scene_type: "indoor"
+    scene_type: "cafe"
     weather_affected: false
     max_capacity: 15
     icon: "☕"
@@ -130,7 +130,7 @@ scenes:
   - id: "scene_school"
     name: "小镇高中"
     description: "镇上唯一的高中，有教学楼、操场和图书馆。年轻的学生们在这里度过他们的校园时光。"
-    scene_type: "indoor"
+    scene_type: "school"
     weather_affected: false
     max_capacity: 100
     icon: "🏫"
@@ -138,7 +138,7 @@ scenes:
   - id: "scene_library"
     name: "公共图书馆"
     description: "安静祥和的图书馆，书架间弥漫着旧书的味道，是学习和阅读的理想场所。"
-    scene_type: "indoor"
+    scene_type: "library"
     weather_affected: false
     max_capacity: 30
     icon: "📚"
@@ -146,11 +146,91 @@ scenes:
   - id: "scene_market"
     name: "便民超市"
     description: "街角的便民超市，货架上摆满了日常用品和新鲜食材，老板娘总是热情地招呼顾客。"
-    scene_type: "indoor"
+    scene_type: "market"
     weather_affected: false
     max_capacity: 20
     icon: "🏪"
 
+
+  - id: "scene_restaurant"
+    name: "小镇餐厅"
+    description: "一家温暖的家庭餐厅，木质的桌椅和暖黄的灯光，供应可口的家常菜。"
+    scene_type: "restaurant"
+    weather_affected: false
+    max_capacity: 30
+    icon: "🍽️"
+
+  - id: "scene_bar"
+    name: "夜色酒吧"
+    description: "小镇夜晚的热闹去处，昏暗的灯光下人们喝酒聊天，偶尔有驻唱歌手。"
+    scene_type: "bar"
+    weather_affected: false
+    max_capacity: 25
+    icon: "🍺"
+
+  - id: "scene_gym"
+    name: "健身中心"
+    description: "明亮的健身房，各种器械一应俱全，墙上贴着激励标语。"
+    scene_type: "gym"
+    weather_affected: false
+    max_capacity: 20
+    icon: "💪"
+
+  - id: "scene_cinema"
+    name: "小镇影院"
+    description: "小镇唯一的电影院，不大但很温馨，门口总是贴着最新电影的海报。"
+    scene_type: "cinema"
+    weather_affected: false
+    max_capacity: 40
+    icon: "🎬"
+
+  - id: "scene_clothing"
+    name: "服装店"
+    description: "一家精致的服装店，橱窗里展示着当季新款，老板娘品味不错。"
+    scene_type: "shop"
+    weather_affected: false
+    max_capacity: 15
+    icon: "👗"
+
+  - id: "scene_station"
+    name: "小镇车站"
+    description: "小镇的公交车站，遮阳棚下有几张长椅，是居民日常通勤的必经之地。"
+    scene_type: "outdoor"
+    weather_affected: true
+    max_capacity: 30
+    icon: "🚉"
+
+  - id: "scene_riverside"
+    name: "河边步道"
+    description: "沿着小河蜿蜒的步道，柳树依依，河里偶尔能看到鸭子游过。"
+    scene_type: "outdoor"
+    weather_affected: true
+    max_capacity: 25
+    icon: "🌊"
+
+  - id: "scene_office"
+    name: "镇政府"
+    description: "一栋两层的政府办公楼，办理各种事务，工作人员忙碌而有序。"
+    scene_type: "office"
+    weather_affected: false
+    max_capacity: 30
+    icon: "🏛️"
+
+  - id: "scene_arcade"
+    name: "游戏厅"
+    description: "充满霓虹灯和街机音效的游戏厅，投篮机和抓娃娃机前总有人在排队。"
+    scene_type: "arcade"
+    weather_affected: false
+    max_capacity: 20
+    icon: "🎮"
+
+  - id: "scene_hospital"
+    name: "小镇医院"
+    description: "小镇的综合医院，虽然不大但设备齐全。"
+    scene_type: "hospital"
+    weather_affected: false
+    max_capacity: 50
+    icon: "🏥"
   # ── Home Scenes (Phase 11) ──────────────────────────
   - id: "apt_a"
     name: "阳光公寓A栋"

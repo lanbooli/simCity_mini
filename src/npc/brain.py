@@ -148,20 +148,17 @@ class Brain:
         return None
 
     def _pick_player_action(self, rel: dict, personality: list, perception) -> dict | None:
-        """Phase 4: Pick an action to initiate toward the player."""
-        comfort = rel.get("intimacy_comfort", 0)
+        """Pick a conversational action toward the player. 
+        Physical/intimate actions are now handled by IntimacyEngine."""
         fav = rel.get("favorability", 0)
-        rel_type = rel.get("relationship_type", "stranger")
-
-        # Build weighted action candidates
-        candidates = []
         is_shy = "害羞" in personality or "内向" in personality
         is_outgoing = "外向" in personality or "开朗" in personality
         is_romantic = "浪漫" in personality
         mood = self.mood_mgr.current
-        scene_type = perception.scene_type
 
-        # Chat up (always available)
+        candidates = []
+
+        # Chat up
         weight = 15
         if is_outgoing: weight *= 1.5
         if mood == "happy": weight *= 1.3
@@ -175,45 +172,9 @@ class Brain:
             if is_romantic: weight *= 1.5
             candidates.append({"action_name": "compliment", "desc": "赞美对方", "cooldown": 90, "weight": weight})
 
-        # Stand close
-        if comfort >= 10 and rel_type not in ("stranger",):
-            weight = 10
-            if is_shy: weight *= 0.3
-            candidates.append({"action_name": "stand_close", "desc": "靠近站立", "cooldown": 30, "weight": weight})
-
-        # Hug
-        if comfort >= 50 and rel_type in ("friend", "best_friend", "boyfriend", "girlfriend", "spouse"):
-            weight = 10
-            if is_shy: weight *= 0.5
-            if is_romantic: weight *= 1.3
-            if scene_type == "outdoor": weight *= 0.8
-            candidates.append({"action_name": "hug", "desc": "拥抱对方", "cooldown": 120, "weight": weight})
-
-        # Kiss (cheek)
-        if comfort >= 70 and rel_type in ("best_friend", "boyfriend", "girlfriend", "spouse"):
-            weight = 5
-            if is_romantic: weight *= 2.0
-            if is_shy: weight *= 0.3
-            if scene_type == "outdoor": weight *= 0.6
-            candidates.append({"action_name": "cheek_kiss", "desc": "亲对方脸颊", "cooldown": 240, "weight": weight})
-
-        # Kiss
-        if comfort >= 80 and rel_type in ("boyfriend", "girlfriend", "spouse"):
-            weight = 3
-            if is_romantic: weight *= 2.0
-            if is_shy: weight *= 0.2
-            if scene_type == "outdoor": weight *= 0.4
-            candidates.append({"action_name": "kiss", "desc": "亲吻对方", "cooldown": 360, "weight": weight})
-
-        # Sweet talk
-        if rel_type in ("boyfriend", "girlfriend", "spouse"):
-            weight = 12
-            if mood == "happy": weight *= 1.3
-            candidates.append({"action_name": "sweet_talk", "desc": "说情话", "cooldown": 30, "weight": weight})
-
         # Mood adjustments
         for c in candidates:
-            if mood == "happy" or mood == "excited":
+            if mood in ("happy", "excited"):
                 c["weight"] *= 1.3
             elif mood == "angry":
                 c["weight"] *= 0.2
@@ -221,7 +182,6 @@ class Brain:
         if not candidates:
             return None
 
-        # Weighted random pick
         total = sum(c["weight"] for c in candidates)
         r = random.random() * total
         cumulative = 0
@@ -231,7 +191,7 @@ class Brain:
                 return {
                     "action": "npc_initiated_action",
                     "scene_id": None,
-                    "activity": f"对玩家做{c['action_name']}",
+                    "activity": f"对玩家{c['action_name']}",
                     "social_target": None,
                     "reason": f"主动互动: {c['action_name']}",
                     "action_name": c["action_name"],

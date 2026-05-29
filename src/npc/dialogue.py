@@ -8,6 +8,7 @@ import logging
 import random
 import re
 import json
+from collections import deque
 from typing import Optional
 from jinja2 import Template
 
@@ -150,12 +151,98 @@ def _load_personality_description(npc_id: str) -> str:
     return "\n".join(lines)
 
 
+class InteractionContext:
+    """Tracks recent interactions and physical state for NPC continuity."""
+    
+    STATE_MAP = {
+        "hug": "hugging", "sudden_hug": "hugging", "back_hug": "hugging",
+        "hold_hands": "holding hands", "hold_hands_walk": "holding hands", "arm_in_arm": "holding hands",
+        "stand_close": "standing very close",
+        "kiss": "kissing", "cheek_kiss": "kissing on the cheek",
+        "forehead_kiss": "kissing on the cheek", "goodbye_kiss": "kissing",
+        "sweet_talk": "whispering sweet words", "whisper": "whispering sweet words",
+        "head_pat": "receiving head pats",
+        "cuddle": "cuddling",
+        "pull_sleeve": "being close",
+        "fix_hair": "being close",
+        "playful_punch": "playful interaction",
+    }
+    
+    STATE_DURATION = {
+        "hugging": 6, "holding hands": 8, "standing very close": 3,
+        "kissing": 3, "kissing on the cheek": 2, "whispering sweet words": 2,
+        "receiving head pats": 4, "cuddling": 5, "being close": 3,
+        "playful interaction": 2,
+    }
+    
+    def __init__(self):
+        self.recent_actions: deque = deque(maxlen=5)
+        self.physical_states: dict[str, float] = {}
+    
+    def add_action(self, action_name: str, action_desc: str, response: str):
+        """Record an action and update physical state."""
+        now = __import__('datetime').datetime.now().isoformat()
+        self.recent_actions.append({
+            "time": now, "action": action_name,
+            "desc": action_desc, "response": response[:120],
+        })
+        state = self.STATE_MAP.get(action_name)
+        if state:
+            duration = self.STATE_DURATION.get(state, 3)
+            self.physical_states[state] = duration
+            # Merge compatible states
+            if state == "kissing" and "hugging" in self.physical_states:
+                self.physical_states["hugging while kissing"] = max(
+                    self.physical_states.get("hugging while kissing", 0), duration)
+                del self.physical_states["hugging"]
+                del self.physical_states["kissing"]
+    
+    def tick(self, game_minutes: int = 15):
+        """Decay physical states. Called each autonomous cycle."""
+        expired = []
+        for state, remaining in list(self.physical_states.items()):
+            self.physical_states[state] = round(remaining - game_minutes / 60.0, 1)
+            if self.physical_states[state] <= 0:
+                expired.append(state)
+        for state in expired:
+            del self.physical_states[state]
+    
+    def get_physical_context(self) -> str:
+        """Summarize current physical state for LLM prompts."""
+        if not self.physical_states:
+            return ""
+        items = sorted(self.physical_states.items(), key=lambda x: x[1], reverse=True)
+        states_text = "，".join(s for s, _ in items)
+        return f"当前的肢体状态：你正和玩家处于{states_text}的状态。你需要注意这个状态并在回应中体现出来。"
+    
+    def get_recent_context(self) -> str:
+        """Summarize recent interactions for LLM prompts."""
+        if not self.recent_actions:
+            return ""
+        parts = []
+        for a in list(self.recent_actions)[-3:]:
+            parts.append(f"- 玩家{a['desc']} → 你的反应：{a['response']}")
+        return "最近的互动：\n" + "\n".join(parts)
+    
+    def get_full_context(self) -> str:
+        """Get full interaction context for LLM injection."""
+        parts = []
+        phys = self.get_physical_context()
+        if phys:
+            parts.append(phys)
+        recent = self.get_recent_context()
+        if recent:
+            parts.append(recent)
+        return "\n".join(parts).strip()
+
+
 class DialogueHandler:
     def __init__(self, npc_data: dict, memory_mgr, relationship_mgr, mood_mgr):
         self.npc = npc_data
         self.memory_mgr = memory_mgr
         self.relationship_mgr = relationship_mgr
         self.mood_mgr = mood_mgr
+        self.interaction_ctx = InteractionContext()
         self._dialogue_lock = asyncio.Lock()
         # Load 39-set personality description for LLM prompts (cached)
         self._personality_desc = _load_personality_description(npc_data.get("id", ""))

@@ -1,5 +1,37 @@
 # Changelog
 
+## v0.3.0 (2026-05-29) — 生理系统 + 场所扩展 + 互动连贯性
+
+### 新增
+- **生理系统**: 4维需求（hunger/thirst/energy/social），衰减+危机+恢复+死亡
+- **亲密度引擎**: 29种NPC主动亲密互动，状态驱动概率链
+- **互动连续性**: InteractionContext，跨动作状态记忆注入LLM
+- **场所扩展**: 9个新场所（餐厅/酒吧/健身房/影院/服装店/车站/河边/镇政府/游戏厅）
+- **通勤系统**: 210对距离矩阵，NPC行走时间，自行车加速，通勤中隐藏
+- **房间级定位**: NPC移动精确到具体房间（客厅/厨房/卧室）
+- **跨公寓隔离**: 卧室物品归属权，NPC只能用自己的床
+- **进程守护**: Supervisor健康检查+自动重启
+
+### 修复
+- 场景类型不匹配导致亲密动作全部失效（cafe/market等→indoor映射）
+- social属性永不恢复
+- daily_check每7天才调用（改为每天）
+- NPC死亡不持久化
+- 危机处理后不继续执行自主循环
+- {needed}变量未定义bug
+- Task was destroyed but it is pending（进程关闭清理）
+- TTS音频错位
+- 玩家照片GAL面板不显示
+
+### 数据库变更
+- npc表新增 is_dead/death_cause 字段
+- item表54个卧室物品设置owner_npc_id
+- 9个新场景+21个新道具
+
+### 配置变更
+- config/scene_distances.json（新建，210对步行距离）
+- config/game_config.yaml新增9个场景
+
 ## v0.2.0 (2026-05-24) — NPC 自主行为系统
 
 ### 新增

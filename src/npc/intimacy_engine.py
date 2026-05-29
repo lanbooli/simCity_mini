@@ -69,7 +69,7 @@ INTIMATE_ACTIONS: list[IntimateAction] = [
     ),
     IntimateAction(
         name="lean_on_shoulder", label="靠肩膀上 😴",
-        rel_threshold="boyfriend", fav_min=60,
+        rel_threshold="friend", fav_min=50,
         allowed_scenes=["home", "indoor", "outdoor"], room_keywords=["客厅", "沙发"],
         time_condition="evening", context_condition="tired",
         base_prob=0.10, cooldown_minutes=90,
@@ -85,7 +85,7 @@ INTIMATE_ACTIONS: list[IntimateAction] = [
     ),
     IntimateAction(
         name="sudden_hug", label="突然拥抱 🫂",
-        rel_threshold="boyfriend", fav_min=70,
+        rel_threshold="friend", fav_min=55,
         allowed_scenes=["home", "indoor", "outdoor"], room_keywords=[],
         time_condition="any", context_condition="any",
         base_prob=0.08, cooldown_minutes=120,
@@ -93,7 +93,7 @@ INTIMATE_ACTIONS: list[IntimateAction] = [
     ),
     IntimateAction(
         name="ask_for_hug", label="撒娇要抱抱 🥺",
-        rel_threshold="boyfriend", fav_min=70,
+        rel_threshold="friend", fav_min=60,
         allowed_scenes=["home"], room_keywords=["客厅"],
         time_condition="any", context_condition="tired",
         base_prob=0.10, cooldown_minutes=120,
@@ -130,6 +130,144 @@ INTIMATE_ACTIONS: list[IntimateAction] = [
         time_condition="evening", context_condition="any",
         base_prob=0.08, cooldown_minutes=90,
         personality_affinity=[5, 10, 16, 32],
+    ),
+    # ── Physical intimacy actions (merged from brain.py) ──
+    IntimateAction(
+        name="stand_close", label="靠近你 🚶",
+        rel_threshold="friend", fav_min=30,
+        allowed_scenes=["home", "indoor", "outdoor"], room_keywords=[],
+        time_condition="any", context_condition="any",
+        base_prob=0.15, cooldown_minutes=40,
+        personality_affinity=[10, 15, 17],
+    ),
+    IntimateAction(
+        name="cheek_kiss", label="亲你脸颊 😚",
+        rel_threshold="best_friend", fav_min=65,
+        allowed_scenes=["home", "indoor"], room_keywords=[],
+        time_condition="any", context_condition="any",
+        base_prob=0.06, cooldown_minutes=180,
+        personality_affinity=[10, 15, 17, 11],
+    ),
+    IntimateAction(
+        name="kiss", label="亲吻你 💋",
+        rel_threshold="boyfriend", fav_min=75,
+        allowed_scenes=["home", "indoor"], room_keywords=["客厅", "卧室"],
+        time_condition="any", context_condition="any",
+        base_prob=0.05, cooldown_minutes=240,
+        personality_affinity=[10, 15, 17, 11],
+    ),
+    IntimateAction(
+        name="sweet_talk", label="对你说情话 💕",
+        rel_threshold="boyfriend", fav_min=60,
+        allowed_scenes=["home", "indoor", "outdoor"], room_keywords=[],
+        time_condition="any", context_condition="any",
+        base_prob=0.10, cooldown_minutes=60,
+        personality_affinity=[10, 15, 17, 32],
+    ),
+    IntimateAction(
+        name="goodbye_kiss", label="告别亲吻 💋",
+        rel_threshold="boyfriend", fav_min=70,
+        allowed_scenes=["home", "indoor"], room_keywords=["门口", "客厅"],
+        time_condition="morning", context_condition="before_out",
+        base_prob=0.12, cooldown_minutes=120,
+        personality_affinity=[10, 15, 17, 11],
+    ),
+    # ── New affectionate/romantic actions ──
+    IntimateAction(
+        name="head_pat", label="摸头杀 ✋",
+        rel_threshold="friend", fav_min=40,
+        allowed_scenes=["home", "indoor", "outdoor"], room_keywords=[],
+        time_condition="any", context_condition="any",
+        base_prob=0.12, cooldown_minutes=60,
+        personality_affinity=[10, 15, 17, 13],
+    ),
+    IntimateAction(
+        name="back_hug", label="从背后抱你 🤗",
+        rel_threshold="best_friend", fav_min=65,
+        allowed_scenes=["home", "indoor"], room_keywords=["厨房", "客厅", "卧室"],
+        time_condition="any", context_condition="any",
+        base_prob=0.06, cooldown_minutes=150,
+        personality_affinity=[10, 15, 17, 11],
+    ),
+    IntimateAction(
+        name="forehead_kiss", label="轻吻额头 💋",
+        rel_threshold="boyfriend", fav_min=80,
+        allowed_scenes=["home", "indoor"], room_keywords=["卧室", "客厅"],
+        time_condition="night", context_condition="tired",
+        base_prob=0.07, cooldown_minutes=200,
+        personality_affinity=[2, 10, 11, 17, 14],
+    ),
+    IntimateAction(
+        name="playful_punch", label="轻捶你一下 💢",
+        rel_threshold="friend", fav_min=40,
+        allowed_scenes=["home", "indoor", "outdoor"], room_keywords=[],
+        time_condition="any", context_condition="any",
+        base_prob=0.10, cooldown_minutes=45,
+        personality_affinity=[10, 15, 16, 19],
+    ),
+    IntimateAction(
+        name="pull_sleeve", label="拉你衣角 🥺",
+        rel_threshold="friend", fav_min=35,
+        allowed_scenes=["home", "indoor", "outdoor"], room_keywords=[],
+        time_condition="any", context_condition="any",
+        base_prob=0.08, cooldown_minutes=50,
+        personality_affinity=[13, 17, 19, 11],
+    ),
+    IntimateAction(
+        name="fix_hair", label="帮你整理头发 ✨",
+        rel_threshold="best_friend", fav_min=60,
+        allowed_scenes=["home", "indoor"], room_keywords=[],
+        time_condition="any", context_condition="any",
+        base_prob=0.08, cooldown_minutes=90,
+        personality_affinity=[2, 14, 17, 32],
+    ),
+    IntimateAction(
+        name="arm_in_arm", label="挽起你手臂 💑",
+        rel_threshold="friend", fav_min=55,
+        allowed_scenes=["outdoor", "indoor"], room_keywords=[],
+        time_condition="daytime", context_condition="any",
+        base_prob=0.10, cooldown_minutes=80,
+        personality_affinity=[10, 15, 17, 11],
+    ),
+    IntimateAction(
+        name="whisper", label="在你耳边低语 😳",
+        rel_threshold="best_friend", fav_min=70,
+        allowed_scenes=["home", "indoor"], room_keywords=["客厅", "卧室"],
+        time_condition="evening", context_condition="any",
+        base_prob=0.06, cooldown_minutes=120,
+        personality_affinity=[15, 17, 11, 10],
+    ),
+    IntimateAction(
+        name="cover_blanket", label="帮你盖好毯子 🛌",
+        rel_threshold="friend", fav_min=50,
+        allowed_scenes=["home"], room_keywords=["卧室", "客厅"],
+        time_condition="night", context_condition="tired",
+        base_prob=0.12, cooldown_minutes=120,
+        personality_affinity=[2, 13, 17, 14, 32],
+    ),
+    IntimateAction(
+        name="bring_tea", label="端茶给你 ☕",
+        rel_threshold="friend", fav_min=35,
+        allowed_scenes=["home", "indoor"], room_keywords=["厨房", "客厅"],
+        time_condition="daytime", context_condition="tired",
+        base_prob=0.12, cooldown_minutes=80,
+        personality_affinity=[2, 13, 14, 32],
+    ),
+    IntimateAction(
+        name="share_snack", label="分享零食 🍪",
+        rel_threshold="friend", fav_min=30,
+        allowed_scenes=["home", "indoor"], room_keywords=["客厅", "厨房"],
+        time_condition="daytime", context_condition="eating",
+        base_prob=0.10, cooldown_minutes=60,
+        personality_affinity=[10, 15, 16, 19, 32],
+    ),
+    IntimateAction(
+        name="cuddle", label="依偎在你身边 🥰",
+        rel_threshold="boyfriend", fav_min=75,
+        allowed_scenes=["home"], room_keywords=["客厅", "卧室"],
+        time_condition="evening", context_condition="any",
+        base_prob=0.08, cooldown_minutes=150,
+        personality_affinity=[10, 11, 17, 13],
     ),
 ]
 
@@ -170,7 +308,8 @@ class IntimacyEngine:
 
     def __init__(self, npc_data: dict, relationship_mgr, mood: str,
                  scene_type: str = "indoor", scene_name: str = "",
-                 game_hour: int = 12, npc_energy: float = 50.0):
+                 game_hour: int = 12, npc_energy: float = 50.0,
+                 interaction_ctx=None):
         self.npc_id = npc_data.get("id", "")
         self.npc_name = npc_data.get("name", "")
         self.relationship_mgr = relationship_mgr
@@ -179,6 +318,7 @@ class IntimacyEngine:
         self.scene_name = scene_name
         self.game_hour = game_hour
         self.npc_energy = npc_energy
+        self.interaction_ctx = interaction_ctx
 
         # Load 39-set personality engine
         personality_ids = _load_personality_ids(self.npc_id)
@@ -224,7 +364,7 @@ class IntimacyEngine:
             # Scene type check
             # Map new scene types (cafe/market/school/etc.) to legacy categories
             scene_cat = self.scene_type
-            if scene_cat in ("cafe", "market", "school", "library", "hospital", "bar", "gym", "restaurant", "shop"):
+            if scene_cat in ("cafe", "market", "school", "library", "hospital", "bar", "gym", "restaurant", "shop", "cinema", "arcade", "office"):
                 scene_cat = "indoor"
             if action.allowed_scenes and scene_cat not in action.allowed_scenes:
                 continue
@@ -237,8 +377,9 @@ class IntimacyEngine:
             if not self._meets_context(action, current_activity):
                 continue
 
-            # Calculate final probability
-            prob = self._calculate_probability(action, fav)
+            # Calculate final probability with interaction context
+            phys_states = set(self.interaction_ctx.physical_states.keys()) if self.interaction_ctx else set()
+            prob = self._calculate_probability(action, fav, phys_states)
             if prob <= 0:
                 continue
 
@@ -296,11 +437,30 @@ class IntimacyEngine:
             return "洗" in activity or "浴" in activity
         return True
 
-    def _calculate_probability(self, action: IntimateAction, fav: int) -> float:
+    # State → boosted actions: when in physical state X, boost Y actions
+    _STATE_BOOST = {
+        "hugging": {"kiss": 3.0, "cheek_kiss": 2.5, "forehead_kiss": 2.0, "sweet_talk": 2.0, "cuddle": 2.5, "whisper": 2.0},
+        "hugging while kissing": {"cuddle": 3.0, "forehead_kiss": 2.5, "sweet_talk": 2.5},
+        "holding hands": {"arm_in_arm": 3.0, "cheek_kiss": 2.0, "sudden_hug": 2.0},
+        "standing very close": {"head_pat": 2.5, "cheek_kiss": 3.0, "fix_hair": 2.5, "pull_sleeve": 1.5},
+        "kissing": {"hug": 2.5, "cuddle": 3.0, "sweet_talk": 2.5},
+        "kissing on the cheek": {"whisper": 2.5, "head_pat": 2.0},
+        "whispering sweet words": {"cheek_kiss": 3.0, "cuddle": 2.0},
+    }
+    
+    # State → suppressed actions: when in state X, suppress Y actions (they don't make sense)
+    _STATE_SUPPRESS = {
+        "hugging": {"stand_close": -0.9, "arm_in_arm": -0.9, "head_pat": -0.7, "pull_sleeve": -0.9, "fix_hair": -0.5, "hold_hands_walk": -0.9},
+        "hugging while kissing": {"stand_close": -0.9, "arm_in_arm": -0.9, "head_pat": -0.8, "pull_sleeve": -0.9},
+        "holding hands": {"stand_close": -0.5},
+        "kissing": {"stand_close": -0.9, "arm_in_arm": -0.9, "pull_sleeve": -0.9, "head_pat": -0.7},
+    }
+
+    def _calculate_probability(self, action: IntimateAction, fav: int, phys_states: set | None = None) -> float:
         """Calculate final probability for an intimate action.
 
         Uses the 39-set personality engine and the probability formula:
-        base_prob × mood_mod × personality_mod × time_mod
+        base_prob × mood_mod × personality_mod × time_mod × state_mod
         """
         # Personality affinity boost
         personality_mod = 1.0
@@ -337,11 +497,25 @@ class IntimacyEngine:
 
         prob = action.base_prob * mood_mod * personality_mod * time_mod
 
+        # State-aware modifier: boost logical next actions, suppress impossible ones
+        state_mod = 1.0
+        if phys_states:
+            for state in phys_states:
+                boosts = self._STATE_BOOST.get(state, {})
+                if action.name in boosts:
+                    state_mod *= boosts[action.name]
+                supps = self._STATE_SUPPRESS.get(state, {})
+                if action.name in supps:
+                    state_mod *= (1.0 + supps[action.name])
+            state_mod = max(0.05, min(state_mod, 5.0))  # clamp
+
+        prob *= state_mod
+
         # High favorability bonus
         if fav >= 85:
             prob *= 1.3
 
-        return min(prob, 0.50)  # cap at 50%
+        return min(prob, 0.60)  # cap at 60%
 
 
 def _load_personality_ids(npc_id: str) -> list[int]:

@@ -9,8 +9,11 @@ from typing import Optional
 # Public scene pools for photo NPCs who need auto-generated schedules.
 # Excludes home-type scenes so photo NPCs randomly pick a public place.
 _PUBLIC_SCENE_POOLS = {
-    "young": ["scene_coffee_shop", "scene_park", "scene_school", "scene_library"],
-    "adult": ["scene_coffee_shop", "scene_park", "scene_market", "scene_library"],
+    "young": ["scene_coffee_shop", "scene_park", "scene_school", "scene_library",
+              "scene_arcade", "scene_cinema", "scene_station", "scene_riverside", "scene_gym"],
+    "adult": ["scene_coffee_shop", "scene_park", "scene_market", "scene_library",
+              "scene_restaurant", "scene_bar", "scene_gym", "scene_clothing",
+              "scene_station", "scene_riverside", "scene_office", "scene_hospital"],
 }
 
 
