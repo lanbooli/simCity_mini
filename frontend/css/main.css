@@ -1491,6 +1491,52 @@ body {
   line-height: 1;
 }
 
+/* ── Physiology Bars ──────────────────────────── */
+
+.gal-char-physiology {
+  width: 100%;
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.gal-phys-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: clamp(9px, 1vw, 11px);
+  color: rgba(255,255,255,0.6);
+}
+
+.gal-phys-icon {
+  width: 14px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.gal-phys-bar-bg {
+  flex: 1;
+  height: 5px;
+  background: rgba(255,255,255,0.1);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.gal-phys-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.5s ease;
+}
+
+.gal-phys-label {
+  width: 28px;
+  text-align: right;
+  font-size: clamp(8px, 0.8vw, 10px);
+  color: rgba(255,255,255,0.4);
+  flex-shrink: 0;
+}
+
 /* ── Textbox ─────────────────────────────────── */
 
 .gal-textbox {

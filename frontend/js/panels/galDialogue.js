@@ -245,6 +245,37 @@ const GALDialogue = {
     document.getElementById('galCharLeftStatus').textContent = `${activity}${autoText}`;
     document.getElementById('galCharLeftMood').textContent = moodIcon;
 
+    // NPC physiology stats
+    var phys = state.physiology;
+    var physEl = document.getElementById('galCharLeftPhysiology');
+    if (physEl) {
+      if (phys) {
+        var icons = { hunger: '🍽️', thirst: '💧', energy: '⚡', social: '👥' };
+        var colors = { hunger: '#FF8A80', thirst: '#81D4FA', energy: '#FFD54F', social: '#A5D6A7' };
+        var html = '';
+        // HP bar (always visible, red when low)
+        var hp = Math.max(0, Math.min(100, phys.hp || 100));
+        var hpColor = hp < 30 ? '#FF5252' : (hp < 60 ? '#FFAB40' : '#69F0AE');
+        html += '<div class="gal-phys-row">'
+          + '<span class="gal-phys-icon">❤️</span>'
+          + '<div class="gal-phys-bar-bg"><div class="gal-phys-bar-fill" style="width:' + hp + '%;background:' + hpColor + '"></div></div>'
+          + '<span class="gal-phys-label">' + Math.round(hp) + '</span>'
+          + '</div>';
+        for (var key of ['hunger', 'thirst', 'energy', 'social']) {
+          var val = Math.max(0, Math.min(100, phys[key] || 0));
+          html += '<div class="gal-phys-row">'
+            + '<span class="gal-phys-icon">' + icons[key] + '</span>'
+            + '<div class="gal-phys-bar-bg"><div class="gal-phys-bar-fill" style="width:' + val + '%;background:' + colors[key] + '"></div></div>'
+            + '<span class="gal-phys-label">' + Math.round(val) + '</span>'
+            + '</div>';
+        }
+        physEl.innerHTML = html;
+        physEl.style.display = '';
+      } else {
+        physEl.style.display = 'none';
+      }
+    }
+
     // Player mood/status (if available)
     document.getElementById('galCharRightStatus').textContent = '';
     document.getElementById('galCharRightMood').textContent = '';
