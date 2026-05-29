@@ -275,6 +275,7 @@ async def game_websocket(ws: WebSocket, player_id: str = "player_001"):
                 d = msg.get("data", {})
                 npc_id = d.get("npc_id", "")
                 logger.info(f"WS dialogue: player={player_id} npc={npc_id}")
+                ws_manager.set_last_dialogue(player_id, ws)
                 # Forward to dialogue inbound stream
                 game_time = await broker.kv_get("state:game_time")
                 time_str = ""

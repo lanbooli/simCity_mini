@@ -20,6 +20,7 @@ class WSManager:
     def __init__(self, broker: RedisBroker):
         self.broker = broker
         self._connections: dict[str, list[WebSocket]] = {}  # player_id -> [WS clients]
+        self._last_dialogue: dict[str, WebSocket] = {}  # player_id -> WS that sent last dialogue
         self._listening = False
 
     async def connect(self, player_id: str, ws: WebSocket):
@@ -31,6 +32,10 @@ class WSManager:
             self._listening = True
             asyncio.create_task(self._subscribe_channels())
 
+    def set_last_dialogue(self, player_id: str, ws: WebSocket):
+        """Remember which WS client sent the last dialogue_send."""
+        self._last_dialogue[player_id] = ws
+
     def disconnect(self, player_id: str, ws: WebSocket = None):
         if ws and player_id in self._connections:
             self._connections[player_id] = [w for w in self._connections[player_id] if w is not ws]
@@ -40,6 +45,15 @@ class WSManager:
             self._connections.pop(player_id, None)
 
     async def send_to_player(self, player_id: str, message: dict):
+        # tts_audio only goes to the client that sent the last dialogue
+        if message.get("type") == "tts_audio":
+            ws = self._last_dialogue.get(player_id)
+            if ws:
+                try:
+                    await ws.send_json(message)
+                except Exception:
+                    self.disconnect(player_id, ws)
+            return
         clients = self._connections.get(player_id, [])
         dead = []
         for ws in clients:
