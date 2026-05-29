@@ -651,6 +651,8 @@ class NpcProcess:
         need_funcs = {"hunger": ["eat", "cook"], "thirst": ["drink"], "energy": ["sleep"]}
         needed_funcs = need_funcs.get(crisis, ["drink"])
 
+        # Private funcs (sleep/wash) need owner filter; public funcs (eat/cook/drink) are shared
+        private_funcs = ("sleep", "wash")
         candidates = []
         for sid in self._all_scene_ids:
             if sid == current_scene:
@@ -658,7 +660,16 @@ class NpcProcess:
             conn = get_connection()
             try:
                 func_pattern = " OR ".join([f"function LIKE '%,{f},%' OR function LIKE '{f},%' OR function LIKE '%,{f}' OR function = '{f}'" for f in needed_funcs])
-                row = fetch_one(conn, f"SELECT 1 FROM item WHERE scene_id = ? AND ({func_pattern}) LIMIT 1", (sid,))
+                # For private functions (sleep/wash), filter by owner
+                is_private = any(f in private_funcs for f in needed_funcs)
+                if is_private:
+                    row = fetch_one(conn,
+                        f"SELECT 1 FROM item WHERE scene_id = ? AND ({func_pattern}) AND (owner_npc_id IS NULL OR owner_npc_id = ?) LIMIT 1",
+                        (sid, self.npc_id))
+                else:
+                    row = fetch_one(conn,
+                        f"SELECT 1 FROM item WHERE scene_id = ? AND ({func_pattern}) LIMIT 1",
+                        (sid,))
                 if row:
                     candidates.append(sid)
             finally:
@@ -690,15 +701,30 @@ class NpcProcess:
             self.physiology.recover("energy", 70)
 
     def _find_room_by_function(self, scene_id: str, func: str) -> dict | None:
-        """Find a room in a home scene whose items support the given function."""
+        """Find a room in a home scene whose items support the given function.
+        
+        For private functions (sleep/wash), only returns rooms where the item
+        is owned by this NPC or is shared (no owner). This prevents NPCs from
+        using each other's bedrooms in shared apartments.
+        For common functions (cook/eat/drink), any matching item is fine."""
+        private_funcs = ("sleep", "wash")
         conn = get_connection()
         try:
-            rows = fetch_all(conn,
-                "SELECT room_name, function FROM item WHERE scene_id = ? AND room_name IS NOT NULL AND function IS NOT NULL",
-                (scene_id,))
-            for row in rows:
-                fn = row.get("function", "") or ""
-                if func in fn.split(","):
+            if func in private_funcs:
+                # Private items: owned by this NPC OR shared (no owner)
+                rows = fetch_all(conn,
+                    "SELECT room_name, owner_npc_id FROM item WHERE scene_id = ? AND room_name IS NOT NULL AND function IS NOT NULL AND function LIKE ?",
+                    (scene_id, f'%{func}%'))
+                for row in rows:
+                    owner = row.get("owner_npc_id", "") or ""
+                    if not owner or owner == self.npc_id:
+                        return {"name": row["room_name"]}
+            else:
+                # Common items: any matching room is fine (kitchen/living room)
+                rows = fetch_all(conn,
+                    "SELECT room_name FROM item WHERE scene_id = ? AND room_name IS NOT NULL AND function IS NOT NULL AND function LIKE ?",
+                    (scene_id, f'%{func}%'))
+                for row in rows:
                     return {"name": row["room_name"]}
         finally:
             conn.close()

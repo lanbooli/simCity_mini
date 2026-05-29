@@ -137,6 +137,16 @@ def seed_data(conn):
         ("item_bookshelf", "scene_library", None, "书架", "高及天花板的橡木书架", "furniture", "decorate", None, False, False),
         ("item_counter", "scene_market", None, "收银台", "老式的收银台", "furniture", None, None, True, False),
         ("item_blackboard", "scene_school", None, "黑板", "教室前面的黑板", "tool", None, None, False, False),
+        # ── Public scene food/water items ──
+        ("item_school_canteen", "scene_school", None, "食堂", "学校食堂，提供午餐", "furniture", "eat,cook", None, True, True),
+        ("item_school_water", "scene_school", None, "饮水机", "走廊里的饮水机", "furniture", "drink", None, True, True),
+        ("item_park_food", "scene_park", None, "小吃摊", "路边小吃摊，有简单食物", "furniture", "eat,cook,drink", None, True, True),
+        ("item_market_snacks", "scene_market", None, "零食货架", "摆满各种零食和方便食品", "furniture", "eat", None, True, True),
+        ("item_market_drinks", "scene_market", None, "饮料冰柜", "各种饮料和矿泉水", "furniture", "drink", None, True, True),
+        ("item_market_veggies", "scene_market", None, "蔬菜水果区", "新鲜蔬菜水果", "furniture", "cook", None, True, True),
+        ("item_hospital_vending", "scene_hospital", None, "自动售货机", "有零食和饮料", "furniture", "eat,drink", None, True, True),
+        ("item_hospital_water", "scene_hospital", None, "饮水机", "提供热水和冷水", "furniture", "drink", None, True, True),
+        ("item_library_vending", "scene_library", None, "自动售货机", "有饮料和零食", "furniture", "eat,drink", None, True, True),
     ]
     for item in items:
         execute(c, """INSERT OR REPLACE INTO item(id, scene_id, owner_npc_id, name, description, item_type, function, room_name, is_interactive, is_usable)
@@ -181,16 +191,18 @@ def seed_data(conn):
         for resident_id in residents:
             if home_id == "home_player":
                 rn = "卧室"
+                owner = None  # Player's own bedroom
             else:
                 name_part = _npc_name_lookup.get(resident_id, resident_id)
                 rn = f"{name_part}卧室"
-            _home_items.append((f"{base}_bed_{resident_id}", home_id, "床", "舒适的床", "furniture", "sleep,couple_intimate", rn))
-            _home_items.append((f"{base}_wardrobe_{resident_id}", home_id, "衣柜", "存放衣物的衣柜", "furniture", "store", rn))
-            _home_items.append((f"{base}_desk_{resident_id}", home_id, "书桌", "学习和工作的书桌", "furniture", "rest", rn))
+                owner = resident_id  # NPC's private bedroom
+            _home_items.append((f"{base}_bed_{resident_id}", home_id, owner, "床", "舒适的床", "furniture", "sleep,couple_intimate", rn))
+            _home_items.append((f"{base}_wardrobe_{resident_id}", home_id, owner, "衣柜", "存放衣物的衣柜", "furniture", "store", rn))
+            _home_items.append((f"{base}_desk_{resident_id}", home_id, owner, "书桌", "学习和工作的书桌", "furniture", "rest", rn))
 
     for item in _home_items:
         execute(c, """INSERT OR REPLACE INTO item(id, scene_id, owner_npc_id, name, description, item_type, function, room_name, is_interactive, is_usable)
-                      VALUES(?, ?, NULL, ?, ?, ?, ?, ?, 1, 1)""", item)
+                      VALUES(?, ?, ?, ?, ?, ?, ?, ?, 1, 1)""", item)
 
     print(f"  Home items seeded: {len(_home_items)}")
 
