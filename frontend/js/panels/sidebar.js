@@ -1,78 +1,142 @@
 /**
  * Powers sceneBar (bottom scene quick-switch) and characterView (full-screen overlay).
- * Named "Sidebar" for backward compatibility with existing code references.
  */
 const Sidebar = {
   _scenes: [],
+  _cat: null,  // current category: 'public' | 'home' | null
+
+  // Scene icon mapping
+  _icons: {
+    scene_coffee_shop:'\u2615', scene_park:'\ud83c\udf33', scene_school:'\ud83c\udfeb',
+    scene_library:'\ud83d\udcda', scene_market:'\ud83d\udecd', scene_hospital:'\ud83c\udfe5',
+    scene_restaurant:'\ud83c\udf7d', scene_bar:'\ud83c\udf78', scene_gym:'\ud83c\udfcb',
+    scene_cinema:'\ud83c\udfac', scene_clothing:'\ud83d\udc57', scene_station:'\ud83d\ude89',
+    scene_riverside:'\ud83c\udf0a', scene_office:'\ud83c\udfdb', scene_arcade:'\ud83c\udfae',
+    apt_a:'\ud83c\udfe2', apt_b:'\ud83c\udfe2', apt_c:'\ud83c\udfe2', apt_d:'\ud83c\udfe2',
+    home_player:'\ud83c\udfe0',
+  },
 
   async init() {
-    // Load scenes into bottom scene bar
     try {
       this._scenes = await API.getScenes();
-      this.renderScenes();
+      this.renderSceneBar();
     } catch (e) {
       console.error('Failed to load scenes:', e);
     }
-
-    // Listen for scene updates
-    Store.on('sceneDetail', () => this.renderScenes());
+    Store.on('sceneDetail', () => this.renderSceneBar());
     Store.on('selectedNpcId', (npcId) => {
-      if (npcId && App._currentView === 'character') {
-        this.showNpcDetail(npcId);
-      }
+      if (npcId && App._currentView === 'character') this.showNpcDetail(npcId);
     });
   },
 
-  // ── Bottom Scene Quick-Switch Bar ──────────────
+  // ── Scene Bar (two-row) ──
 
-  renderScenes() {
-    const el = document.getElementById('sceneBar');
+  renderSceneBar() {
+    this._renderCatRow();
+    this._renderBtnRow();
+  },
+
+  _renderCatRow() {
+    const el = document.getElementById('sceneCatRow');
     if (!el) return;
-    const currentScene = Store.get('currentSceneId');
+    const currentId = Store.get('currentSceneId');
+    const currentScene = this._scenes.find(s => s.id === currentId);
+    const currentName = currentScene ? currentScene.name : '';
+    const cat = this._cat;
 
-    // Group: public scenes first, then residential (home) scenes
-    const publicScenes = this._scenes.filter(s => s.scene_type !== 'home');
-    const homeScenes = this._scenes.filter(s => s.scene_type === 'home');
+    el.innerHTML =
+      '<button class="scene-cat-btn' + (cat === 'public' ? ' active' : '') + '" data-cat="public">\ud83c\udfd9\ufe0f 公共场所</button>' +
+      '<button class="scene-cat-btn' + (cat === 'home' ? ' active' : '') + '" data-cat="home">\ud83c\udfe0 住宅</button>' +
+      '<span class="scene-cat-current">\ud83d\udccd ' + currentName + '</span>' +
+      '<button class="scene-map-btn" onclick="Sidebar.openMap()">\ud83d\uddfa\ufe0f 地图</button>';
 
-    const renderBtn = (s) => {
-      const active = s.id === currentScene ? ' active' : '';
-      const isHome = s.scene_type === 'home';
-      const homeIcon = isHome ? (s.id === 'home_player' ? ' 🏠' : ' 🏢') : '';
-      return `<button class="scene-bar-btn${active}${isHome ? ' scene-home-btn' : ''}" data-scene-id="${s.id}">
-        <span>${s.icon || '📍'}</span>
-        <span>${s.name}${homeIcon}</span>
-      </button>`;
-    };
+    el.querySelectorAll('.scene-cat-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const newCat = btn.dataset.cat;
+        this._cat = (this._cat === newCat) ? null : newCat;
+        this._renderCatRow();
+        this._renderBtnRow();
+      });
+    });
+  },
 
-    let html = publicScenes.map(renderBtn).join('');
-    if (homeScenes.length) {
-      html += '<span class="scene-bar-divider"></span>';
-      html += homeScenes.map(renderBtn).join('');
-    }
-    el.innerHTML = html;
+  _renderBtnRow() {
+    const el = document.getElementById('sceneBtnRow');
+    if (!el) return;
+    const currentId = Store.get('currentSceneId');
+    const cat = this._cat;
 
-    // Event delegation
+    let scenes = this._scenes;
+    if (cat === 'public') scenes = scenes.filter(s => s.scene_type !== 'home');
+    else if (cat === 'home') scenes = scenes.filter(s => s.scene_type === 'home');
+
+    el.innerHTML = scenes.map(s => {
+      const icon = this._icons[s.id] || '\ud83d\udccd';
+      const active = s.id === currentId ? ' active' : '';
+      return '<button class="scene-bar-btn' + active + '" data-scene-id="' + s.id + '" data-tooltip="' + s.name + '">' + icon + '</button>';
+    }).join('');
+
     el.querySelectorAll('.scene-bar-btn').forEach(btn => {
       btn.addEventListener('click', () => this.selectScene(btn.dataset.sceneId));
     });
+
+    // Scroll current into view
+    const curBtn = el.querySelector('.scene-bar-btn.active');
+    if (curBtn) curBtn.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'smooth' });
   },
 
   async selectScene(sceneId) {
     const prevSceneId = Store.get('currentSceneId');
     Store.set('currentSceneId', sceneId);
-    this.renderScenes();
-
+    this.renderSceneBar();
     try {
-      // Send scene_focus via WebSocket for backend location tracking + permission check
       WSClient.send({ type: 'scene_focus', data: { scene_id: sceneId } });
       const detail = await API.getScene(sceneId);
       Store.set('sceneDetail', detail);
     } catch (e) {
       console.error('Failed to load scene:', e);
-      // Revert on error
       Store.set('currentSceneId', prevSceneId);
-      this.renderScenes();
+      this.renderSceneBar();
     }
+  },
+
+  // ── Map Overlay ──
+
+  openMap() {
+    const overlay = document.getElementById('sceneMapOverlay');
+    const grid = document.getElementById('sceneMapGrid');
+    if (!overlay || !grid) return;
+    const currentId = Store.get('currentSceneId');
+    const npcState = Store.get('npcs') || {};
+
+    grid.innerHTML = this._scenes.map(s => {
+      const icon = this._icons[s.id] || '\ud83d\udccd';
+      const isCurrent = s.id === currentId;
+      let npcCount = 0;
+      for (const [nid, ns] of Object.entries(npcState)) {
+        if (ns.current_scene_id === s.id) npcCount++;
+      }
+      const npcText = npcCount > 0 ? '\ud83d\udc64 ' + npcCount + '人' : '';
+      return '<div class="scene-map-card' + (isCurrent ? ' current' : '') + '" data-scene-id="' + s.id + '">' +
+        '<span class="scene-map-icon">' + icon + '</span>' +
+        '<span class="scene-map-name">' + s.name + '</span>' +
+        (npcText ? '<span class="scene-map-npc">' + npcText + '</span>' : '') +
+        '</div>';
+    }).join('');
+
+    grid.querySelectorAll('.scene-map-card').forEach(card => {
+      card.addEventListener('click', () => {
+        this.selectScene(card.dataset.sceneId);
+        this.closeMap();
+      });
+    });
+
+    overlay.style.display = 'flex';
+  },
+
+  closeMap() {
+    const overlay = document.getElementById('sceneMapOverlay');
+    if (overlay) overlay.style.display = 'none';
   },
 
   _handleHomeAccessDenied(data) {
@@ -118,76 +182,44 @@ const Sidebar = {
     const npcState = Store.get('npcs')?.[npc.id] || {};
     const aa = npcState.auto_action;
     const currentActionHtml = aa
-      ? `<span style="color:var(--mood-happy);">${aa.icon || ''} ${aa.display_text || aa.action_name || ''}</span>`
+      ? '<span style="color:var(--mood-happy);">' + (aa.icon || '') + ' ' + (aa.display_text || aa.action_name || '') + '</span>'
       : (npcState.current_activity || npc.current_activity || '闲逛中');
 
     const avatarUrl = npc.appearance?.avatar || npc.avatar || '';
-    const genderEmoji = npc.gender === 'male' ? '👦' : npc.gender === 'female' ? '👧' : '🧑';
-    const animClass = aa?.animation ? `css-${aa.animation}` : '';
+    const genderEmoji = npc.gender === 'male' ? '\ud83d\udc66' : npc.gender === 'female' ? '\ud83d\udc67' : '\ud83e\uddd1';
+    const animClass = aa?.animation ? 'css-' + aa.animation : '';
 
-    // Build persona text
     const personaParts = [];
-    if (npc.age) personaParts.push(`${npc.age}岁`);
+    if (npc.age) personaParts.push(npc.age + '岁');
     personaParts.push(npc.gender === 'male' ? '♂' : npc.gender === 'female' ? '♀' : '⚧');
     if (npc.career) personaParts.push(npc.career);
     const personaText = personaParts.join(' · ');
 
-    return `
-      <div class="char-card">
-        <div class="char-avatar-wrap">
-          ${avatarUrl
-            ? `<img src="${avatarUrl}" class="char-avatar-img" alt="${npc.name}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">`
-            : ''}
-          <div class="char-avatar-emoji ${animClass}" style="${avatarUrl ? 'display:none;' : ''}font-size:64px;">${genderEmoji}</div>
-        </div>
-        <div class="char-name">${npc.name}</div>
-        <div class="char-bio">${personaText}</div>
-        <div class="char-current">当前：${currentActionHtml}</div>
-
-        <div class="char-section">
-          <div class="char-section-title">外貌</div>
-          <div class="char-section-text">${Object.entries({...appearance, ...clothing}).map(([k,v]) => `${k}: ${v}`).join(', ') || '暂无信息'}</div>
-        </div>
-
-        <div class="char-section">
-          <div class="char-section-title">性格</div>
-          <div class="personality-tags">
-            ${personality.map(p => `<span class="personality-tag">${p}</span>`).join('') || '暂无'}
-          </div>
-        </div>
-
-        <div class="char-section">
-          <div class="char-section-title">💕 与你的关系</div>
-          <div class="char-section-text">
-            ${rel.relationship_type ? `关系: ${rel.relationship_type}<br>` : ''}
-            ${typeof renderRelationshipBars !== 'undefined' ? renderRelationshipBars(rel.favorability || 0, rel.familiarity || 0) : ''}
-          </div>
-        </div>
-
-        ${goals.length ? `
-        <div class="char-section">
-          <div class="char-section-title">🎯 近期目标</div>
-          <div class="char-section-text">
-            ${goals.map(g => `• [${g.goal_type || '目标'}] ${g.description || ''}`).join('<br>')}
-          </div>
-        </div>` : ''}
-
-        <div class="char-section">
-          <div class="char-section-title">📍 所在位置</div>
-          <div class="char-section-text">${_formatLocation(npc, npcState)}</div>
-        </div>
-
-        <button class="char-btn-dialogue" onclick="App.selectNpc('${npc.id}')">💬 开始对话</button>
-      </div>`;
+    return '<div class="char-card">' +
+      '<div class="char-avatar-wrap">' +
+        (avatarUrl ? '<img src="' + avatarUrl + '" class="char-avatar-img" alt="' + npc.name + '" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\';">' : '') +
+        '<div class="char-avatar-emoji ' + animClass + '" style="' + (avatarUrl ? 'display:none;' : '') + 'font-size:64px;">' + genderEmoji + '</div>' +
+      '</div>' +
+      '<div class="char-name">' + npc.name + '</div>' +
+      '<div class="char-bio">' + personaText + '</div>' +
+      '<div class="char-current">当前：' + currentActionHtml + '</div>' +
+      '<div class="char-section"><div class="char-section-title">外貌</div><div class="char-section-text">' + (Object.entries({...appearance, ...clothing}).map(([k,v]) => k + ': ' + v).join(', ') || '暂无信息') + '</div></div>' +
+      '<div class="char-section"><div class="char-section-title">性格</div><div class="personality-tags">' + (personality.map(p => '<span class="personality-tag">' + p + '</span>').join('') || '暂无') + '</div></div>' +
+      '<div class="char-section"><div class="char-section-title">\ud83d\udc95 与你的关系</div><div class="char-section-text">' +
+        (rel.relationship_type ? '关系: ' + rel.relationship_type + '<br>' : '') +
+        (typeof renderRelationshipBars !== 'undefined' ? renderRelationshipBars(rel.favorability || 0, rel.familiarity || 0) : '') +
+      '</div></div>' +
+      (goals.length ? '<div class="char-section"><div class="char-section-title">\ud83c\udfaf 近期目标</div><div class="char-section-text">' + goals.map(g => '• [' + (g.goal_type || '目标') + '] ' + (g.description || '')).join('<br>') + '</div></div>' : '') +
+      '<div class="char-section"><div class="char-section-title">\ud83d\udccd 所在位置</div><div class="char-section-text">' + _formatLocation(npc, npcState) + '</div></div>' +
+      '<button class="char-btn-dialogue" onclick="App.selectNpc(\'' + npc.id + '\')">\ud83d\udcac 开始对话</button>' +
+      '</div>';
   },
 };
 
-/** Format location string for character card: "场景名 · 房间" or "场景名" */
+/** Format location string for character card */
 function _formatLocation(npc, npcState) {
   const sceneName = npcState.current_scene_name || npc.scene_name || '未知';
   const roomName = npcState.current_room || '';
-  if (roomName) {
-    return `${sceneName} · ${roomName}`;
-  }
+  if (roomName) return sceneName + ' · ' + roomName;
   return sceneName;
 }

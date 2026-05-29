@@ -51,9 +51,25 @@
     </div>
   </main>
 
-  <!-- Bottom Scene Quick-Switch Bar -->
+  <!-- Bottom Scene Quick-Switch Bar (two-row) -->
   <div class="scene-bar" id="sceneBar">
-    <!-- Populated by JS -->
+    <div class="scene-cat-row" id="sceneCatRow">
+      <!-- Populated by JS: category tabs + current scene + map -->
+    </div>
+    <div class="scene-btn-row" id="sceneBtnRow">
+      <!-- Populated by JS: scrollable scene icon buttons -->
+    </div>
+  </div>
+
+  <!-- Map Overlay -->
+  <div class="scene-map-overlay" id="sceneMapOverlay" style="display:none;">
+    <div class="scene-map-header">
+      <h2>🗺️ 小镇地图</h2>
+      <button class="scene-map-close" onclick="Sidebar.closeMap()">✕</button>
+    </div>
+    <div class="scene-map-grid" id="sceneMapGrid">
+      <!-- Populated by JS -->
+    </div>
   </div>
 </div>
 

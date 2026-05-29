@@ -648,46 +648,174 @@ body {
 
 /* ── Social Circle Panel ─────────────────────── */
 
-/* ── Bottom Scene Quick-Switch Bar ───────────── */
+/* ── Bottom Scene Quick-Switch Bar (two-row) ── */
 
 .scene-bar {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 16px;
+  flex-direction: column;
+  gap: 0;
   background: linear-gradient(0deg, #FFE0B2, #FFF0E5);
   border-top: 2px solid var(--border-color);
-  overflow-x: auto;
   flex-shrink: 0;
 }
+
+/* ── Category tabs row ── */
+.scene-cat-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 5px 12px 0;
+}
+
+.scene-cat-btn {
+  padding: 4px 14px;
+  background: transparent;
+  border: none;
+  border-bottom: 3px solid transparent;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.15s;
+  border-radius: 4px 4px 0 0;
+}
+
+.scene-cat-btn:hover { color: var(--text-primary); background: rgba(255,255,255,0.4); }
+.scene-cat-btn.active {
+  color: var(--accent-orange);
+  border-bottom-color: var(--accent-orange);
+}
+
+.scene-cat-current {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.scene-map-btn {
+  margin-left: 6px;
+  padding: 3px 10px;
+  font-size: 11px;
+  background: white;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.15s;
+}
+.scene-map-btn:hover { background: #FFF8E1; border-color: var(--accent-orange); }
+
+/* ── Scene buttons row ── */
+.scene-btn-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px 8px;
+  overflow-x: auto;
+  scroll-behavior: smooth;
+}
+
+.scene-btn-row::-webkit-scrollbar { height: 3px; }
+.scene-btn-row::-webkit-scrollbar-thumb { background: #ccc; border-radius: 3px; }
 
 .scene-bar-btn {
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 6px 14px;
+  justify-content: center;
+  width: 36px; height: 36px;
+  padding: 0;
   background: white;
   border: 2px solid var(--border-color);
-  border-radius: 20px;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-primary);
+  border-radius: 50%;
+  font-size: 18px;
   cursor: pointer;
-  white-space: nowrap;
+  flex-shrink: 0;
   transition: all 0.15s;
-  font-family: inherit;
+  position: relative;
 }
 
 .scene-bar-btn:hover {
   background: #FFF8E1;
   border-color: var(--accent-orange);
+  transform: scale(1.1);
 }
 
 .scene-bar-btn.active {
   background: var(--accent-orange);
   color: white;
   border-color: var(--accent-orange);
+  box-shadow: 0 0 0 3px rgba(255,152,0,0.25);
 }
+
+/* Tooltip on hover */
+.scene-bar-btn::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: 110%;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 3px 8px;
+  background: rgba(0,0,0,0.8);
+  color: white;
+  font-size: 11px;
+  font-weight: 500;
+  border-radius: 4px;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.scene-bar-btn:hover::after { opacity: 1; }
+
+/* ── Map Overlay ── */
+.scene-map-overlay {
+  position: fixed; inset: 0;
+  z-index: 400;
+  background: rgba(0,0,0,0.7);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+.scene-map-header {
+  display: flex; align-items: center; gap: 16px;
+  margin-bottom: 20px; color: white;
+}
+.scene-map-header h2 { font-size: 22px; margin: 0; }
+.scene-map-close {
+  padding: 6px 14px; font-size: 16px;
+  background: rgba(255,255,255,0.15); color: white;
+  border: 1px solid rgba(255,255,255,0.3); border-radius: 8px;
+  cursor: pointer;
+}
+.scene-map-close:hover { background: rgba(255,255,255,0.25); }
+
+.scene-map-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 12px;
+  max-width: 700px;
+  width: 90%;
+}
+.scene-map-card {
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  padding: 14px 8px;
+  background: rgba(255,255,255,0.12);
+  border: 1px solid rgba(255,255,255,0.2);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.15s;
+  color: white;
+}
+.scene-map-card:hover { background: rgba(255,255,255,0.25); transform: scale(1.03); }
+.scene-map-card.current { border-color: var(--accent-orange); background: rgba(255,152,0,0.2); }
+.scene-map-icon { font-size: 28px; }
+.scene-map-name { font-size: 11px; text-align: center; }
+.scene-map-npc { font-size: 10px; opacity: 0.7; }
 
 /* ── Full-Screen Overlay (Social / Character) ── */
 
