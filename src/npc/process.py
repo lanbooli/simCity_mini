@@ -1962,7 +1962,7 @@ class NpcProcess:
         try:
             conn = get_connection()
             execute(conn,
-                "UPDATE npc SET is_dead = 1, death_cause = ?, updated_at = datetime('now') WHERE id = ?",
+                "UPDATE npc SET is_dead = 1, is_active = 0, death_cause = ?, updated_at = datetime('now') WHERE id = ?",
                 (self.physiology.death_cause, self.npc_id))
             conn.commit()
             conn.close()
