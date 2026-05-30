@@ -20,6 +20,12 @@ class Settings(BaseSettings):
     lmstudio_model: str = "qwen3.6-35b-a3b-uncensored-hauhaucs-aggressive"
     lmstudio_social_model: str = "qwen3.5-4b-uncensored-hauhaucs-aggressive"
 
+    # Embedding (for vector memory/RAG)
+    # Uses llm_provider's base URL by default; override with EMBEDDING_BASE_URL
+    embedding_base_url: str = ""
+    embedding_model: str = ""
+    embedding_dim: int = 768
+
     # Database
     database_path: str = "data/city_town.db"
     chromadb_path: str = "data/chromadb"

@@ -1,28 +1,48 @@
 """
-Embedding generator using LM Studio's local embedding API.
-Uses text-embedding-nomic-embed-text-v1.5 (768-dim).
+Embedding generator — routes to the correct provider based on config.
+Defaults: LM Studio → nomic-embed-text-v1.5 / DeepSeek → configured model.
 """
 
 import httpx
 from config.settings import settings
 
-EMBEDDING_MODEL = "text-embedding-nomic-embed-text-v1.5"
-EMBEDDING_DIM = 768
+
+def _get_embedding_config():
+    """Resolve embedding endpoint based on provider and settings overrides."""
+    provider = settings.llm_provider
+
+    # Base URL: explicit override > provider default
+    if settings.embedding_base_url:
+        base_url = settings.embedding_base_url.rstrip("/")
+    elif provider == "deepseek":
+        base_url = settings.deepseek_base_url.rstrip("/")
+    else:
+        base_url = settings.lmstudio_base_url.rstrip("/")
+
+    # Model: explicit override > provider default
+    if settings.embedding_model:
+        model = settings.embedding_model
+    elif provider == "lmstudio":
+        model = "text-embedding-nomic-embed-text-v1.5"
+    else:
+        model = settings.deepseek_main_model  # fallback for deepseek/other
+
+    return base_url, model, settings.embedding_dim
 
 
 def encode_text(text: str) -> list[float]:
-    """Encode a single text to embedding vector via LM Studio."""
+    """Encode a single text to embedding vector."""
+    base_url, model, dim = _get_embedding_config()
     try:
         r = httpx.post(
-            f"{settings.lmstudio_base_url}/v1/embeddings",
-            json={"model": EMBEDDING_MODEL, "input": text},
+            f"{base_url}/v1/embeddings",
+            json={"model": model, "input": text},
             timeout=10.0,
         )
         r.raise_for_status()
         return r.json()["data"][0]["embedding"]
     except Exception:
-        # Fallback: return zero vector on failure
-        return [0.0] * EMBEDDING_DIM
+        return [0.0] * dim
 
 
 def encode_texts(texts: list[str]) -> list[list[float]]:
@@ -31,4 +51,4 @@ def encode_texts(texts: list[str]) -> list[list[float]]:
 
 
 def get_embedding_dim() -> int:
-    return EMBEDDING_DIM
+    return settings.embedding_dim
