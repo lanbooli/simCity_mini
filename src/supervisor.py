@@ -347,6 +347,15 @@ class Supervisor:
                         print(f"[health] {child_name} is alive but not reporting health ({age:.0f}s stale). Restarting...")
                         self._restart_process(child_name)
                     elif proc is None:
+                        # Check if this is a dead NPC — clean up stale health key
+                        if name.startswith("npc:") and child_name.startswith("npc_"):
+                            try:
+                                dead_ids = self._get_dead_npc_ids()
+                                if child_name in dead_ids:
+                                    r.delete(key)
+                                    continue
+                            except Exception:
+                                pass
                         print(f"[health] {child_name} has health key but no supervisor child. Skipping.")
                 
                 r.close()
