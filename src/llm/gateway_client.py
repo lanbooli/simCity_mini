@@ -68,6 +68,34 @@ PRIORITY_MAP = {
 }
 
 
+# LLM Generation Parameters
+# call_type -> {max_tokens, temperature}
+# Main model (35B/thinking): generous max_tokens for quality
+# Social model (4B/non-thinking): leaner for throughput
+LLM_PARAMS = {
+    "player_dialogue":    {"max_tokens": 4000, "temperature": 0.7},
+    "player_action":      {"max_tokens": 4000, "temperature": 0.7},
+    "confession":         {"max_tokens": 4000, "temperature": 0.8},
+    "proposal":           {"max_tokens": 4000, "temperature": 0.8},
+    "breakup":            {"max_tokens": 4000, "temperature": 0.8},
+    "violation":          {"max_tokens": 4000, "temperature": 0.8},
+    "social_open":        {"max_tokens": 2048, "temperature": 0.7},
+    "social_reply":       {"max_tokens": 2048, "temperature": 0.7},
+    "greeting":           {"max_tokens": 1024, "temperature": 0.8},
+    "action_narrative":   {"max_tokens": 2048, "temperature": 0.8},
+    "inner_thought":      {"max_tokens": 1024, "temperature": 0.5},
+    "post":               {"max_tokens": 2048, "temperature": 0.8},
+    "comment_reply":      {"max_tokens": 1024, "temperature": 0.8},
+    "goal_eval":          {"max_tokens": 1024, "temperature": 0.5},
+    "social_performance": {"max_tokens": 2048, "temperature": 0.8},
+}
+
+def get_llm_params(call_type):
+    """(max_tokens, temperature) for a call type."""
+    p = LLM_PARAMS.get(call_type, {})
+    return p.get("max_tokens", 1024), p.get("temperature", 0.7)
+
+
 # ── Context Trimming ──────────────────────────────
 
 def trim_context(messages: list[dict], call_type: str) -> tuple[list[dict], bool]:

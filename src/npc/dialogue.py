@@ -14,7 +14,7 @@ from jinja2 import Template
 
 from src.llm.gateway_client import (
     get_gateway_client, PRIORITY_MAP, trim_context,
-    Priority, GatewayError,
+    Priority, GatewayError, get_llm_params,
 )
 from src.llm.prompts import (
     NPC_DIALOGUE_SYSTEM, NPC_DIALOGUE_USER, NPC_ACTION_SYSTEM,
@@ -315,12 +315,13 @@ class DialogueHandler:
         gateway = get_gateway_client()
         try:
             logger.info(f"NPC {self.npc['name']} calling LLM for {player_name}...")
+            max_tok, temp = get_llm_params("player_dialogue")
             raw_response = await gateway.submit(
                 priority=PRIORITY_MAP["player_dialogue"],
                 call_type="player_dialogue",
                 messages=messages,
-                temperature=0.7,
-                max_tokens=1024,
+                temperature=temp,
+                max_tokens=max_tok,
                 timeout=300,  # thinking model takes 60-180s
             )
             response = _clean_response(raw_response)
@@ -657,12 +658,13 @@ class DialogueHandler:
         try:
             logger.info(f"NPC {self.npc['name']} reacting to action '{action_name}' "
                         f"(physical={is_physical}, success={action_success}) from {player_name}...")
+            max_tok, temp = get_llm_params("player_action")
             raw_response = await gateway.submit(
                 priority=PRIORITY_MAP["player_action"],
                 call_type="player_action",
                 messages=messages,
-                temperature=0.7,
-                max_tokens=1024,
+                temperature=temp,
+                max_tokens=max_tok,
                 timeout=300,
             )
             response = _clean_response(raw_response)
@@ -744,7 +746,7 @@ class DialogueHandler:
             personality_desc=self._personality_desc,
             scene_name=scene_name, rel=rel,
         )
-        return await self._simple_llm_call(system_msg, f"向{target_name}发起互动", max_tokens=1024, call_type="social_open")
+        return await self._simple_llm_call(system_msg, f"向{target_name}发起互动", call_type="social_open")
 
     async def respond_to_npc(
         self, other_npc_name: str, other_npc_id: str, other_message: str,
@@ -760,7 +762,7 @@ class DialogueHandler:
             personality_desc=self._personality_desc,
             scene_name=scene_name, rel=rel,
         )
-        return await self._simple_llm_call(system_msg, f"回应{other_npc_name}", max_tokens=1024, call_type="social_reply")
+        return await self._simple_llm_call(system_msg, f"回应{other_npc_name}", call_type="social_reply")
 
     # ── NPC→Player initiated interactions ──────────
 
@@ -786,7 +788,7 @@ class DialogueHandler:
             player_role=p_role,
             at_workplace=at_workplace,
         )
-        return await self._simple_llm_call(system_msg, f"向{player_name}打招呼", max_tokens=1024, call_type="greeting")
+        return await self._simple_llm_call(system_msg, f"向{player_name}打招呼", call_type="greeting")
 
     async def generate_action_narrative(
         self, target_name: str, target_id: str, action_name: str,
@@ -811,7 +813,7 @@ class DialogueHandler:
             player_role=p_role,
             interaction_context=interaction_ctx,
         )
-        return await self._simple_llm_call(system_msg, f"对{target_name}做{action_name}", max_tokens=1024, call_type="action_narrative")
+        return await self._simple_llm_call(system_msg, f"对{target_name}做{action_name}", call_type="action_narrative")
 
     # ── Inner thought ───────────────────────────────
 
@@ -829,7 +831,7 @@ class DialogueHandler:
         thoughts = ["（今天的风真舒服呢）", "（有点想喝杯热咖啡）",
                     "（待会要做点什么呢...）", "（今天的心情还不错~）"]
         try:
-            result = await self._simple_llm_call(system_msg, "内心独白", max_tokens=1024, call_type="inner_thought")
+            result = await self._simple_llm_call(system_msg, "内心独白", call_type="inner_thought")
             return result.get("content", random.choice(thoughts))
         except Exception:
             return random.choice(thoughts)
@@ -849,7 +851,7 @@ class DialogueHandler:
             personality_desc=self._personality_desc,
             scene_name=scene_name, game_time=game_time, rel=rel,
         )
-        return await self._simple_llm_call(system_msg, f"向{target_name}告白", max_tokens=1024, call_type="confession")
+        return await self._simple_llm_call(system_msg, f"向{target_name}告白", call_type="confession")
 
     async def generate_proposal(
         self, target_name: str, target_id: str,
@@ -864,7 +866,7 @@ class DialogueHandler:
             personality_desc=self._personality_desc,
             scene_name=scene_name, game_time=game_time, rel=rel,
         )
-        return await self._simple_llm_call(system_msg, f"向{target_name}求婚", max_tokens=1024, call_type="proposal")
+        return await self._simple_llm_call(system_msg, f"向{target_name}求婚", call_type="proposal")
 
     async def generate_breakup(
         self, target_name: str, target_id: str, reason: str,
@@ -880,7 +882,7 @@ class DialogueHandler:
             personality_desc=self._personality_desc,
             scene_name=scene_name, rel=rel,
         )
-        return await self._simple_llm_call(system_msg, f"与{target_name}分手", max_tokens=1024, call_type="breakup")
+        return await self._simple_llm_call(system_msg, f"与{target_name}分手", call_type="breakup")
 
     # ── Boundary violation narrative ────────────────
 
@@ -900,7 +902,7 @@ class DialogueHandler:
             personality_desc=self._personality_desc,
             scene_name=scene_name, rel=rel,
         )
-        return await self._simple_llm_call(system_msg, f"对{actor_name}越界行为的反应", max_tokens=1024, call_type="violation")
+        return await self._simple_llm_call(system_msg, f"对{actor_name}越界行为的反应", call_type="violation")
 
     # ── Social feed post generation ───────────────
 
@@ -918,7 +920,7 @@ class DialogueHandler:
             scene_name=scene_name,
             recent_memory=recent_memory or "无特别的事件",
         )
-        result = await self._simple_llm_call(system_msg, "发朋友圈", max_tokens=1024, call_type="post")
+        result = await self._simple_llm_call(system_msg, "发朋友圈", call_type="post")
         return result["content"]
 
     async def generate_comment_reply(
@@ -935,7 +937,7 @@ class DialogueHandler:
             commenter_name=commenter_name,
             rel=rel,
         )
-        result = await self._simple_llm_call(system_msg, "回复评论", max_tokens=1024, call_type="comment_reply")
+        result = await self._simple_llm_call(system_msg, "回复评论", call_type="comment_reply")
         return result["content"]
 
     # ── Goal evaluation ───────────────────────────
@@ -946,6 +948,7 @@ class DialogueHandler:
         system_msg = system_template.render(npc=self.npc, goal=goal)
         gateway = get_gateway_client()
         try:
+            max_tok, temp = get_llm_params("goal_eval")
             raw = await gateway.submit(
                 priority=PRIORITY_MAP["goal_eval"],
                 call_type="goal_eval",
@@ -953,8 +956,8 @@ class DialogueHandler:
                     {"role": "system", "content": system_msg},
                     {"role": "user", "content": "评估今天的目标进展"},
                 ],
-                temperature=0.5,
-                max_tokens=512,
+                temperature=temp,
+                max_tokens=max_tok,
             )
             match = re.search(r'\{[^}]+\}', raw)
             if match:
@@ -991,6 +994,7 @@ class DialogueHandler:
 
         gateway = get_gateway_client()
         try:
+            max_tok, temp = get_llm_params("social_performance")
             raw = await gateway.submit(
                 priority=PRIORITY_MAP["social_performance"],
                 call_type="social_performance",
@@ -998,8 +1002,8 @@ class DialogueHandler:
                     {"role": "system", "content": system_msg},
                     {"role": "user", "content": f"请生成{activity}的对话序列。"},
                 ],
-                temperature=0.8,
-                max_tokens=512,
+                temperature=temp,
+                max_tokens=max_tok,
             )
             # Parse JSON from response
             json_str = raw.strip()
@@ -1030,10 +1034,12 @@ class DialogueHandler:
     # ── Simple LLM call helper ──────────────────────
 
     async def _simple_llm_call(self, system_msg: str, context: str,
-                               max_tokens: int = 200, call_type: str = "") -> dict:
+                               max_tokens: int = 0, call_type: str = "") -> dict:
         """Make a simple LLM call via Gateway and parse favorability from response."""
         gateway = get_gateway_client()
         try:
+            default_tok, default_temp = get_llm_params(call_type) if call_type else (1024, 0.7)
+            tok = max_tokens if max_tokens > 0 else default_tok
             raw_response = await gateway.submit(
                 priority=PRIORITY_MAP.get(call_type, Priority.MEDIUM),
                 call_type=call_type,
@@ -1041,8 +1047,8 @@ class DialogueHandler:
                     {"role": "system", "content": system_msg},
                     {"role": "user", "content": context},
                 ],
-                temperature=0.8,
-                max_tokens=max_tokens,
+                temperature=default_temp,
+                max_tokens=tok,
             )
             response = _clean_response(raw_response)
             fav_change = self._parse_favorability(response)
