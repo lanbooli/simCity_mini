@@ -465,13 +465,15 @@ async def list_models():
         "social_model": settings.deepseek_social_model if provider == "deepseek" else settings.lmstudio_social_model,
     }
 
-    # Build available model list, fall back to known models if provider unreachable
+    # Check provider health
+    provider_online = False
     available = []
     if provider == "lmstudio":
         try:
             async with httpx.AsyncClient(timeout=3.0) as client:
                 resp = await client.get(f"{settings.lmstudio_base_url}/v1/models")
                 if resp.status_code == 200:
+                    provider_online = True
                     data = resp.json()
                     available = [m.get("id", "") for m in data.get("data", [])]
         except Exception:
@@ -481,18 +483,29 @@ async def list_models():
             available = [
                 settings.lmstudio_model,
                 settings.lmstudio_social_model,
-                "qwen3.6-35b-a3b-uncensored-hauhaucs-aggressive",
-                "qwen3.5-4b-uncensored-hauhaucs-aggressive",
             ]
     elif provider == "deepseek":
-        available = [
-            settings.deepseek_main_model,
-            settings.deepseek_social_model,
-            "deepseek-v4-pro",
-            "deepseek-v4-flash",
-            "deepseek-chat",
-            "deepseek-reasoner",
-        ]
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                resp = await client.get(
+                    f"{settings.deepseek_base_url}/v1/models",
+                    headers={"Authorization": f"Bearer {settings.deepseek_api_key}"},
+                )
+                if resp.status_code == 200:
+                    provider_online = True
+                    data = resp.json()
+                    available = [m.get("id", "") for m in data.get("data", [])]
+        except Exception:
+            pass
+        if not available:
+            available = [
+                settings.deepseek_main_model,
+                settings.deepseek_social_model,
+                "deepseek-v4-pro",
+                "deepseek-v4-flash",
+                "deepseek-chat",
+                "deepseek-reasoner",
+            ]
     else:
         available = [current["main_model"], current["social_model"]]
     # Deduplicate while preserving order
@@ -505,6 +518,7 @@ async def list_models():
             "current": current,
             "available": available,
             "providers": ["deepseek", "lmstudio"],
+            "provider_online": provider_online,
         }
     }
 

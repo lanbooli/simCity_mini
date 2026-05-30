@@ -400,10 +400,13 @@ const AdminPanel = {
       const cur = d.current || {};
       const available = d.available || [];
 
+      const online = d.provider_online;
+      const statusIcon = online === true ? '🟢' : online === false ? '🔴' : '⚪';
+      const statusText = online === true ? '在线' : online === false ? '离线(显示兜底列表)' : '未知';
       info.innerHTML = `
         当前: 🎯 <strong>${cur.main_model || '?'}</strong> 
         &nbsp;|&nbsp; 💬 <strong>${cur.social_model || '?'}</strong>
-        <br>提供者: ${cur.provider || '?'}
+        <br>${statusIcon} ${cur.provider || '?'} — ${statusText}
       `;
 
       // Set current provider in dropdown
