@@ -744,7 +744,7 @@ class DialogueHandler:
             personality_desc=self._personality_desc,
             scene_name=scene_name, rel=rel,
         )
-        return await self._simple_llm_call(system_msg, f"向{target_name}发起互动", max_tokens=512, call_type="social_open")
+        return await self._simple_llm_call(system_msg, f"向{target_name}发起互动", max_tokens=1024, call_type="social_open")
 
     async def respond_to_npc(
         self, other_npc_name: str, other_npc_id: str, other_message: str,
@@ -760,7 +760,7 @@ class DialogueHandler:
             personality_desc=self._personality_desc,
             scene_name=scene_name, rel=rel,
         )
-        return await self._simple_llm_call(system_msg, f"回应{other_npc_name}", max_tokens=512, call_type="social_reply")
+        return await self._simple_llm_call(system_msg, f"回应{other_npc_name}", max_tokens=1024, call_type="social_reply")
 
     # ── NPC→Player initiated interactions ──────────
 
@@ -786,7 +786,7 @@ class DialogueHandler:
             player_role=p_role,
             at_workplace=at_workplace,
         )
-        return await self._simple_llm_call(system_msg, f"向{player_name}打招呼", max_tokens=512, call_type="greeting")
+        return await self._simple_llm_call(system_msg, f"向{player_name}打招呼", max_tokens=1024, call_type="greeting")
 
     async def generate_action_narrative(
         self, target_name: str, target_id: str, action_name: str,
@@ -811,7 +811,7 @@ class DialogueHandler:
             player_role=p_role,
             interaction_context=interaction_ctx,
         )
-        return await self._simple_llm_call(system_msg, f"对{target_name}做{action_name}", max_tokens=512, call_type="action_narrative")
+        return await self._simple_llm_call(system_msg, f"对{target_name}做{action_name}", max_tokens=1024, call_type="action_narrative")
 
     # ── Inner thought ───────────────────────────────
 
@@ -829,7 +829,7 @@ class DialogueHandler:
         thoughts = ["（今天的风真舒服呢）", "（有点想喝杯热咖啡）",
                     "（待会要做点什么呢...）", "（今天的心情还不错~）"]
         try:
-            result = await self._simple_llm_call(system_msg, "内心独白", max_tokens=512, call_type="inner_thought")
+            result = await self._simple_llm_call(system_msg, "内心独白", max_tokens=1024, call_type="inner_thought")
             return result.get("content", random.choice(thoughts))
         except Exception:
             return random.choice(thoughts)
@@ -918,7 +918,7 @@ class DialogueHandler:
             scene_name=scene_name,
             recent_memory=recent_memory or "无特别的事件",
         )
-        result = await self._simple_llm_call(system_msg, "发朋友圈", max_tokens=512, call_type="post")
+        result = await self._simple_llm_call(system_msg, "发朋友圈", max_tokens=1024, call_type="post")
         return result["content"]
 
     async def generate_comment_reply(
@@ -935,7 +935,7 @@ class DialogueHandler:
             commenter_name=commenter_name,
             rel=rel,
         )
-        result = await self._simple_llm_call(system_msg, "回复评论", max_tokens=512, call_type="comment_reply")
+        result = await self._simple_llm_call(system_msg, "回复评论", max_tokens=1024, call_type="comment_reply")
         return result["content"]
 
     # ── Goal evaluation ───────────────────────────

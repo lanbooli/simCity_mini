@@ -71,8 +71,14 @@ class LMStudioClient:
         choice = data.get("choices", [{}])[0]
         msg = choice.get("message", {})
         content = msg.get("content", "") or ""
-        # Log if content is empty but response was successful
+        # Fallback: thinking models put output in reasoning_content
         if not content:
+            reasoning = msg.get("reasoning_content", "") or ""
+            if reasoning:
+                logger.info("[LMStudio] using reasoning_content as fallback "
+                            "(len=%d, finish_reason=%s)",
+                            len(reasoning), choice.get("finish_reason", "?"))
+                return reasoning
             logger.warning(
                 "[LMStudio] empty content from model=%s. "
                 "msg keys=%s finish_reason=%s",
