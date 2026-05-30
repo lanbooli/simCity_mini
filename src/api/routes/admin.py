@@ -13,6 +13,8 @@ from config.settings import settings
 from src.common.database import get_connection, fetch_one, fetch_all, execute
 from src.common.models import gen_id
 from src.common.utils import clamp
+import logging
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
