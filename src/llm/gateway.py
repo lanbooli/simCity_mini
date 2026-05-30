@@ -543,14 +543,14 @@ class Gateway:
         while self._running:
             # Report health every 30s (using main Redis, no extra connection)
             try:
-                ts = _time.time()
+                now = _time.time()
                 await self._redis.set(
                     "health:llm_gateway",
                     json.dumps({
                         "name": "llm_gateway",
                         "status": "alive",
                         "pid": os.getpid(),
-                        "timestamp": ts,
+                        "timestamp": now,
                         "processed": self._stats["processed"],
                         "errors": self._stats["errors"],
                         "circuit": self._cb.state,
@@ -561,13 +561,14 @@ class Gateway:
                 )
             except Exception as e:
                 logger.warning(f"Gateway health report failed: {e}")
-            # Log stats every 5th health check (150s)
-            if self._stats["processed"] % 5 == 0:
+            # Log stats every 30s
+            if now - self._stats.get("last_report", 0) >= 30:
                 logger.info(
                     f"Gateway stats: processed={self._stats['processed']} "
                     f"errors={self._stats['errors']} stale={self._stats['stale']} "
                     f"circuit={self._cb.state}"
                 )
+                self._stats["last_report"] = now
             await asyncio.sleep(30)
 
 
