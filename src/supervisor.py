@@ -218,6 +218,19 @@ class Supervisor:
 
         # 4. Start all NPC processes (skip dead NPCs)
         dead_npc_ids = self._get_dead_npc_ids()
+        if dead_npc_ids:
+            try:
+                import redis as _r
+                _rdb = _r.from_url(getattr(settings, "redis_url", "redis://localhost:6379"))
+                cleaned = 0
+                for did in dead_npc_ids:
+                    if _rdb.delete(f"health:npc:{did}"):
+                        cleaned += 1
+                if cleaned:
+                    print(f"[health] Cleaned {cleaned} stale health keys for dead NPCs")
+                _rdb.close()
+            except Exception as e:
+                print(f"[health] Failed to clean dead NPC health keys: {e}")
         for npc_id in NPC_IDS:
             if npc_id in dead_npc_ids:
                 print(f"[npc:{npc_id}] Skipping dead NPC")
