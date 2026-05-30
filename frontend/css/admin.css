@@ -136,6 +136,18 @@
   margin: 2px 0;
   box-sizing: border-box;
 }
+.admin-select {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.admin-select option {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 250px;
+}
 .admin-select:focus, .admin-input:focus { outline: none; border-color: #ff9800; }
 .admin-input { width: 100%; }
 

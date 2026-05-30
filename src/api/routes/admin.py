@@ -596,11 +596,27 @@ async def switch_provider(request: dict):
         r.publish(MODEL_SWITCH_CHANNEL, cmd)
         r.close()
 
+        # Also switch models to the new provider's defaults
+        if provider == "deepseek":
+            main_default = settings.deepseek_main_model
+            social_default = settings.deepseek_social_model
+        else:
+            main_default = settings.lmstudio_model
+            social_default = settings.lmstudio_social_model
+
+        for target, model in [("main", main_default), ("social", social_default)]:
+            r.publish(MODEL_SWITCH_CHANNEL, json.dumps({
+                "action": "switch_model",
+                "target": target,
+                "model": model,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            }))
+
         # Update .env for persistence
         _update_env_file("LLM_PROVIDER", provider)
         settings.llm_provider = provider
-        logger.info("Provider switched to %s", provider)
-        return {"status": "ok", "provider": provider, "message": f"已切换到 {provider}，即时生效"}
+        logger.info("Provider switched to %s (main=%s, social=%s)", provider, main_default, social_default)
+        return {"status": "ok", "provider": provider, "main_model": main_default, "social_model": social_default, "message": f"已切换到 {provider}，即时生效"}
     except Exception as e:
         logger.error("Provider switch failed: %s", e)
         raise HTTPException(500, str(e))

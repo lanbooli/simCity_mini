@@ -413,7 +413,7 @@ const AdminPanel = {
       }
 
       select.innerHTML = available.map(m => 
-        `<option value="${m}">${m}</option>`
+        `<option value="${m}" title="${m}">${m.length > 35 ? m.substring(0, 32) + '...' : m}</option>`
       ).join('');
     } catch (e) {
       console.error('Admin: failed to refresh models', e);
