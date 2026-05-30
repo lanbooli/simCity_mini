@@ -152,6 +152,26 @@ python -m src.supervisor stop
 
 启动后访问 `http://localhost:8000` 进入游戏。
 
+### 启动 Live2D 桌面宠物（可选）
+
+独立的 macOS 悬浮宠物窗口，Live2D 动画 + 语音对话：
+
+```bash
+# 编译并运行
+cd desktop_pet/live2d_pet
+make && ./Live2DPet
+```
+
+功能：
+- 透明悬浮窗口，跨桌面显示
+- Live2D Cubism 5 角色动画（呼吸、眨眼、物理模拟）
+- 对话气泡 + TTS 语音播放
+- NPC 切换、角色信息查看
+- 与 Web 前端共享后端 API
+
+详见 [Live2D 桌面宠物文档](docs/LIVE2D_PET.md)
+
+
 ### 管理面板
 
 开发调试时，在浏览器中按 `Ctrl+Shift+M` 或访问 `?admin=true` 打开管理面板。可修改 NPC 属性、关系数值、游戏状态，以及触发快速测试事件。

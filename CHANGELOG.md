@@ -1,5 +1,32 @@
 # Changelog
 
+## v0.4.0 (2026-05-30) — Live2D 桌面宠物
+
+### 新增
+- **Live2D 桌面宠物**: macOS 原生悬浮窗口，Live2D Cubism 5 引擎
+- **Cubism 集成**: Core C API + Native Framework (C++) + Metal 渲染器
+- **角色动画**: 呼吸、眨眼、物理模拟、空闲动作、反应动作
+- **表情系统**: 支持 exp3.json 表情文件切换（与 NPC 心情联动）
+- **对话气泡**: 自定义气泡样式（含三角箭头），5 秒渐隐
+- **TTS 同步**: 嘴巴张合与语音播放同步
+- **NPC 切换**: 下拉菜单选择任意 NPC 对话
+- **角色信息**: 右键菜单查看 NPC 位置、生理指数、关系
+- **场景名/关系统一**: 所有显示使用真实中文名称（非数据库字段名）
+- **双宠物共存**: 新 Live2D 宠物与旧 SwiftUI 宠物 (PetApp.swift) 可同时运行
+
+### 技术
+- Swift + SwiftUI（窗口/UI）
+- Objective-C++（桥接 C++ Framework）
+- Live2D Cubism 5 Native Framework（动画/物理/渲染）
+- Metal Shading Language（GPU 渲染）
+
+### 文档
+- docs/LIVE2D_PET.md（完整设计文档）
+- docs/ARCHITECTURE.md（新增总览架构图）
+- README.md（新增桌面宠物启动说明）
+
+---
+
 ## v0.3.0 (2026-05-29) — 生理系统 + 场所扩展 + 互动连贯性
 
 ### 新增

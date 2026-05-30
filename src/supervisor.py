@@ -163,6 +163,18 @@ class Supervisor:
             except (ValueError, OSError):
                 PID_FILE.unlink()
 
+    def _get_dead_npc_ids(self) -> set[str]:
+        """Query database for NPCs marked as dead."""
+        try:
+            from src.common.database import get_connection, fetch_all
+            conn = get_connection()
+            rows = fetch_all(conn, "SELECT id FROM npc WHERE is_dead = 1")
+            conn.close()
+            return {r["id"] for r in rows}
+        except Exception as e:
+            print(f"[supervisor] Failed to query dead NPCs: {e}")
+            return set()
+
     def _can_restart(self, name: str) -> bool:
         """Restart backoff: max MAX_RESTART_COUNT restarts within RESTART_WINDOW_SECONDS."""
         now = time.time()
@@ -204,8 +216,12 @@ class Supervisor:
             self._spawn_tts_gateway()
             time.sleep(3)  # Wait for MLX model to load (~3s)
 
-        # 4. Start all NPC processes
+        # 4. Start all NPC processes (skip dead NPCs)
+        dead_npc_ids = self._get_dead_npc_ids()
         for npc_id in NPC_IDS:
+            if npc_id in dead_npc_ids:
+                print(f"[npc:{npc_id}] Skipping dead NPC")
+                continue
             print(f"[npc:{npc_id}] Starting NPC process...")
             self._spawn(npc_id, {
                 "module": "src.npc.process",
@@ -279,7 +295,7 @@ class Supervisor:
 
     def _health_monitor_loop(self):
         """Background thread: check process health via Redis, restart stale ones."""
-        HEALTH_TIMEOUT = 120  # seconds: if no health report within this time, consider hung
+        HEALTH_TIMEOUT = 180  # seconds: if no health report within this time, consider hung
         CHECK_INTERVAL = 20  # seconds between checks
         
         # Map process names used in health reports to supervisor child names
@@ -513,6 +529,15 @@ class Supervisor:
                             del self.children[name]
                             self._write_status_file()
                             continue
+
+                        # Skip dead NPCs (don't restart deceased characters)
+                        if name.startswith("npc_"):
+                            dead_ids = self._get_dead_npc_ids()
+                            if name in dead_ids:
+                                print(f"[{name}] NPC is dead. Removing from watch list.")
+                                del self.children[name]
+                                self._write_status_file()
+                                continue
 
                         # Special handling for API: check port before restart
                         if name == "api":

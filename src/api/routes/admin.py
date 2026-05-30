@@ -441,3 +441,116 @@ def export_full_state():
         return {"status": "ok", "data": state}
     finally:
         conn.close()
+
+
+# ── Model Management ───────────────────────────────
+
+import asyncio
+import httpx
+from config.settings import settings
+
+MODEL_SWITCH_CHANNEL = "admin:model:switch"
+REDIS_URL = settings.redis_url
+
+
+@router.get("/models")
+async def list_models():
+    """List current models and available models from providers."""
+    _require_admin()
+
+    provider = settings.llm_provider
+    current = {
+        "provider": provider,
+        "main_model": settings.deepseek_main_model if provider == "deepseek" else settings.lmstudio_model,
+        "social_model": settings.deepseek_social_model if provider == "deepseek" else settings.lmstudio_social_model,
+    }
+
+    available = []
+    if provider == "lmstudio":
+        # Query LM Studio for available models
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                resp = await client.get(f"{settings.lmstudio_base_url}/v1/models")
+                if resp.status_code == 200:
+                    data = resp.json()
+                    available = [m.get("id", "") for m in data.get("data", [])]
+        except Exception as e:
+            available = [f"(无法获取模型列表: {e})"]
+    elif provider == "deepseek":
+        available = [
+            "deepseek-v4-pro",
+            "deepseek-v4-flash",
+            "deepseek-chat",
+            "deepseek-reasoner",
+        ]
+    else:
+        available = [current["main_model"], current["social_model"]]
+
+    return {"status": "ok", "data": {"current": current, "available": available}}
+
+
+@router.post("/models/switch")
+async def switch_model(request: dict):
+    """Switch main or social model. Takes effect immediately via Redis pub/sub."""
+    _require_admin()
+
+    target = request.get("target", "main")  # "main" or "social"
+    model_name = request.get("model", "").strip()
+
+    if not model_name:
+        raise HTTPException(400, "model is required")
+
+    if target not in ("main", "social"):
+        raise HTTPException(400, "target must be 'main' or 'social'")
+
+    try:
+        import redis
+        r = redis.from_url(REDIS_URL)
+        cmd = json.dumps({
+            "action": "switch_model",
+            "target": target,
+            "model": model_name,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        })
+        r.publish(MODEL_SWITCH_CHANNEL, cmd)
+
+        # Also update .env for persistence
+        env_key = f"DEEPSEEK_{'MAIN' if target == 'main' else 'SOCIAL'}_MODEL" if settings.llm_provider == "deepseek" else f"LMSTUDIO_{'MODEL' if target == 'main' else 'SOCIAL_MODEL'}"
+        _update_env_file(env_key, model_name)
+
+        # Reload settings in-process
+        if settings.llm_provider == "deepseek":
+            if target == "main":
+                settings.deepseek_main_model = model_name
+            else:
+                settings.deepseek_social_model = model_name
+        else:
+            if target == "main":
+                settings.lmstudio_model = model_name
+            else:
+                settings.lmstudio_social_model = model_name
+
+        r.close()
+        return {"status": "ok", "data": {"target": target, "model": model_name, "dispatched": True}}
+    except Exception as e:
+        raise HTTPException(500, f"Failed to switch model: {e}")
+
+
+def _update_env_file(key: str, value: str):
+    """Update a key=value line in .env file."""
+    env_path = Path(__file__).parent.parent.parent.parent / ".env"
+    if not env_path.exists():
+        return
+
+    lines = env_path.read_text().splitlines()
+    updated = False
+    for i, line in enumerate(lines):
+        if line.startswith(f"{key}=") or line.startswith(f"# {key}="):
+            lines[i] = f"{key}={value}"
+            updated = True
+            break
+
+    if not updated:
+        lines.append(f"{key}={value}")
+
+    env_path.write_text("\n".join(lines) + "\n")

@@ -57,6 +57,27 @@ const AdminPanel = {
             </select>
           </div>
           <div class="admin-section">
+            <div class="admin-section-title">
+              🤖 模型管理
+              <button onclick="AdminPanel._refreshModels()" class="admin-btn-sm" style="margin-left:auto;" title="刷新模型列表">🔄</button>
+            </div>
+            <div id="adminModelInfo" style="font-size:11px;color:#888;margin-bottom:8px;">
+              点击刷新加载...
+            </div>
+            <div style="display:flex;gap:4px;margin-bottom:6px;">
+              <select id="adminModelTarget" class="admin-select" style="flex:1;">
+                <option value="main">🎯 主模型 (玩家对话)</option>
+                <option value="social">💬 社交模型 (NPC后台)</option>
+              </select>
+            </div>
+            <div style="display:flex;gap:4px;">
+              <select id="adminModelSelect" class="admin-select" style="flex:2;">
+                <option value="">-- 选择模型 --</option>
+              </select>
+              <button onclick="AdminPanel._switchModel()" class="admin-btn-sm" style="flex:1;">✅ 切换</button>
+            </div>
+          </div>
+          <div class="admin-section">
             <div class="admin-section-title">⚡ 快捷测试</div>
             <button onclick="AdminPanel._resetAll()" class="admin-btn-sm admin-btn-danger" style="width:100%;margin-bottom:4px">💣 重置所有记忆和对话</button>
             <button onclick="AdminPanel._trigger('npc_decide')" class="admin-btn-sm">🧠 强制NPC决策</button>
@@ -357,6 +378,61 @@ const AdminPanel = {
   },
 
   // ── Triggers ──
+
+  // ── Model Management ──
+
+  async _refreshModels() {
+    const info = document.getElementById('adminModelInfo');
+    const select = document.getElementById('adminModelSelect');
+    if (!info || !select) return;
+
+    try {
+      const res = await fetch('/api/admin/models');
+      const json = await res.json();
+      const d = json.data || {};
+      const cur = d.current || {};
+      const available = d.available || [];
+
+      info.innerHTML = `
+        当前: 🎯 <strong>${cur.main_model || '?'}</strong> 
+        &nbsp;|&nbsp; 💬 <strong>${cur.social_model || '?'}</strong>
+        <br>提供者: ${cur.provider || '?'}
+      `;
+
+      select.innerHTML = available.map(m => 
+        `<option value="${m}">${m}</option>`
+      ).join('');
+    } catch (e) {
+      console.error('Admin: failed to refresh models', e);
+      info.innerHTML = '加载失败';
+    }
+  },
+
+  async _switchModel() {
+    const target = document.getElementById('adminModelTarget')?.value || 'main';
+    const model = document.getElementById('adminModelSelect')?.value;
+    if (!model) return;
+
+    const info = document.getElementById('adminModelInfo');
+    try {
+      const res = await fetch('/api/admin/models/switch', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({target: target, model: model}),
+      });
+      const json = await res.json();
+      if (json.status === 'ok') {
+        if (info) info.innerHTML = `✅ 已切换! 正在生效...`;
+        setTimeout(() => this._refreshModels(), 1500);
+      } else {
+        if (info) info.innerHTML = `❌ 切换失败`;
+      }
+    } catch (e) {
+      console.error('Admin: switch model failed', e);
+      if (info) info.innerHTML = '❌ 切换失败';
+    }
+  },
+
   async _trigger(type) {
     await fetch('/api/admin/trigger', {
       method: 'POST',

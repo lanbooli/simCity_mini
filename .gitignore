@@ -9,3 +9,9 @@ logs/
 frontend/assets/audio/
 .DS_Store
 city_town.db
+desktop_pet/live2d_pet/build/
+desktop_pet/live2d_pet/CubismCore/
+desktop_pet/live2d_pet/CubismFramework/
+*.metallib
+*.pcm
+*.swiftmodule

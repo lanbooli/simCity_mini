@@ -283,17 +283,31 @@ class NpcProcess:
                 await self._publish_state()
                 return
 
-        # Weekly check (aging, elder death roll) — triggers every 7 game days
+        # Aging & elder death check (midnight game time)
         if data.get("hour") == 0 and data.get("minute") == 0 and self.physiology:
-            self._days_passed += 1
-            if self._days_passed % 1 == 0:
-                self.physiology.daily_check()
-                if self.physiology.is_dead:
-                    logger.info(f"NPC {self.npc_data['name']} has died: {self.physiology.death_cause}")
-                    self._persist_death()
-                    self._running = False
-                    await self._publish_state()
-                    return
+            import time as _time
+            _now = _time.monotonic()
+            if not hasattr(self, '_last_daily_check_real'):
+                self._last_daily_check_real = _now
+            _elapsed_hours = (_now - self._last_daily_check_real) / 3600.0
+
+            # Aging: once per 480 real hours (20 real days).
+            # 55 age-years (25→80) * 480h ≈ 3 real years of continuous running.
+            if _elapsed_hours >= 480.0:
+                self._last_daily_check_real = _now
+                self._days_passed += 1
+                self.physiology.age_one_year()
+                logger.debug(f"NPC {self.npc_data['name']} aged to {self.physiology._age}")
+
+            # Elder death roll: every game midnight (1.6 real hours at 15x)
+            # Probability scales from 0.7%/check at age 70 to 14%/check at age 90+.
+            self.physiology.elder_death_check()
+            if self.physiology.is_dead:
+                logger.info(f"NPC {self.npc_data['name']} has died: {self.physiology.death_cause}")
+                self._persist_death()
+                self._running = False
+                await self._publish_state()
+                return
 
         # Run autonomous decision (every ~15 game minutes)
         if data.get("minute", 0) % 15 == 0 and not self._in_dialogue_with and not self._is_traveling:
@@ -711,7 +725,19 @@ class NpcProcess:
             candidates = [self._home_scene_id]
 
         if not candidates:
-            logger.warning(f"NPC {self.npc_data['name']}: crisis={crisis}, no scene with {needed_funcs} items found!")
+            # Universal fallback: NPC finds basic sustenance anywhere
+            logger.warning(f"NPC {self.npc_data['name']}: crisis={crisis}, no scene with {needed_funcs} items found! Using universal fallback.")
+            if crisis == "hunger":
+                self.physiology.recover("hunger", 30)
+                self.physiology.recover("thirst", 10)
+                self.npc_data["current_activity"] = "随便吃了点东西充饥"
+            elif crisis == "thirst":
+                self.physiology.recover("thirst", 30)
+                self.npc_data["current_activity"] = "找水喝"
+            elif crisis == "energy":
+                self.physiology.recover("energy", 20)
+                self.npc_data["current_activity"] = "就地休息一会"
+            await self._publish_state()
             return
 
         target = random.choice(candidates)
@@ -792,47 +818,71 @@ class NpcProcess:
         }
 
     def _find_room_by_function(self, scene_id: str, func: str) -> dict | None:
-        """Find a room in a home scene whose items support the given function.
+        """Find a room in a scene whose items support the given function.
         
         For private functions (sleep/wash), only returns rooms where the item
         is owned by this NPC or is shared (no owner). This prevents NPCs from
         using each other's bedrooms in shared apartments.
-        For common functions (cook/eat/drink), any matching item is fine."""
+        For common functions (cook/eat/drink), any matching item is fine.
+        Falls back to scene rooms JSON if item query returns nothing."""
         private_funcs = ("sleep", "wash")
         conn = get_connection()
         try:
             if func in private_funcs:
                 # Private items: owned by this NPC OR shared (no owner)
                 rows = fetch_all(conn,
-                    "SELECT room_name, owner_npc_id FROM item WHERE scene_id = ? AND room_name IS NOT NULL AND function IS NOT NULL AND function LIKE ?",
+                    "SELECT room_name, owner_npc_id FROM item WHERE scene_id = ? AND function IS NOT NULL AND function LIKE ?",
                     (scene_id, f'%{func}%'))
                 for row in rows:
                     owner = row.get("owner_npc_id", "") or ""
                     if not owner or owner == self.npc_id:
-                        return {"name": row["room_name"]}
+                        name = row.get("room_name") or self._get_scene_room_name(scene_id, func)
+                        if name:
+                            return {"name": name}
             else:
-                # Common items: any matching room is fine (kitchen/living room)
+                # Common items: match function in any room (or no room for public scenes)
                 rows = fetch_all(conn,
-                    "SELECT room_name FROM item WHERE scene_id = ? AND room_name IS NOT NULL AND function IS NOT NULL AND function LIKE ?",
+                    "SELECT room_name FROM item WHERE scene_id = ? AND function IS NOT NULL AND function LIKE ?",
                     (scene_id, f'%{func}%'))
                 for row in rows:
-                    return {"name": row["room_name"]}
+                    name = row.get("room_name") or self._get_scene_room_name(scene_id, func)
+                    return {"name": name or self._get_scene_name(scene_id)}
         finally:
             conn.close()
-        # Fallback: scan scene rooms JSON for bedroom/kitchen
+        # Fallback: scan scene rooms JSON
+        name = self._get_scene_room_name(scene_id, func)
+        if name:
+            return {"name": name}
+        return {"name": self._get_scene_name(scene_id)}
+
+    def _get_scene_room_name(self, scene_id: str, func: str) -> str | None:
+        """Extract room name from scene JSON matching a function keyword."""
+        import json as _json
         conn = get_connection()
         try:
-            srow = fetch_one(conn, "SELECT rooms FROM scene WHERE id = ?", (scene_id,))
-            if srow:
-                rooms = json.loads(srow["rooms"]) if isinstance(srow["rooms"], str) else (srow["rooms"] or [])
-                func_to_keyword = {"sleep": "卧室", "cook": "厨房", "eat": "厨房", "drink": "厨房", "wash": "浴室"}
-                keyword = func_to_keyword.get(func, "")
+            srow = fetch_one(conn, "SELECT name, rooms FROM scene WHERE id = ?", (scene_id,))
+            if not srow:
+                return None
+            func_to_keyword = {"sleep": "卧室", "cook": "厨房", "eat": "厨房", "drink": "厨房", "wash": "浴室", "rest": "客厅"}
+            keyword = func_to_keyword.get(func, "")
+            rooms_raw = srow.get("rooms")
+            if rooms_raw:
+                rooms = _json.loads(rooms_raw) if isinstance(rooms_raw, str) else (rooms_raw or [])
                 for r in rooms:
                     if keyword and keyword in r.get("name", ""):
-                        return {"name": r["name"]}
+                        return r["name"]
         finally:
             conn.close()
         return None
+
+    def _get_scene_name(self, scene_id: str) -> str:
+        """Get scene display name."""
+        conn = get_connection()
+        try:
+            row = fetch_one(conn, "SELECT name FROM scene WHERE id = ?", (scene_id,))
+            return row["name"] if row else "未知地点"
+        finally:
+            conn.close()
 
     async def _execute_social_handshake(self, intent, data: dict):
         """Phase 1+3: Send invitation via stream, await handshake response, then perform."""

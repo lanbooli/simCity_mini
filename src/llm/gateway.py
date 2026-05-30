@@ -232,6 +232,19 @@ class GatewayWorker:
             )
         return self._social_client
 
+    def switch_model(self, target: str, model_name: str):
+        """Hot-swap model without restart. Invalidates cached clients."""
+        if target == "main":
+            if self._main_model != model_name:
+                logger.info("Switching main model: %s -> %s", self._main_model, model_name)
+                self._main_model = model_name
+                self._main_client = None
+        elif target == "social":
+            if self._social_model != model_name:
+                logger.info("Switching social model: %s -> %s", self._social_model, model_name)
+                self._social_model = model_name
+                self._social_client = None
+
     async def process(self, request: dict) -> dict:
         """Process one request. Returns response dict for pub/sub."""
         req_id = request.get("request_id", "?")
@@ -342,10 +355,39 @@ class Gateway:
             # NPC workers
             *[asyncio.create_task(self._run_npc_worker(i)) for i in range(self.cfg.npc_workers)],
             asyncio.create_task(self._stats_reporter()),
+            asyncio.create_task(self._model_switch_listener()),
         ]
-        logger.info(f"Gateway {self._instance_id} ready — "
+        logger.info(f"Gateway {self._instance_id} ready — main={self._worker._main_model}, social={self._worker._social_model}, provider={self.cfg.llm_provider} — "
+                     f"main={self._worker._main_model}, social={self._worker._social_model}, "
+                     f"provider={self.cfg.llm_provider} — "
                      f"player={self.cfg.player_stream}, npc={self.cfg.npc_stream}")
         await asyncio.gather(*self._tasks, return_exceptions=True)
+
+    async def _model_switch_listener(self):
+        """Listen for model switch commands via Redis pub/sub."""
+        try:
+            pubsub = self._redis.pubsub()
+            await pubsub.subscribe("admin:model:switch")
+            logger.info("Model switch listener subscribed to admin:model:switch")
+            async for msg in pubsub.listen():
+                if not self._running:
+                    break
+                if msg["type"] != "message":
+                    continue
+                try:
+                    data = json.loads(msg["data"])
+                    if data.get("action") == "switch_model":
+                        target = data.get("target", "main")
+                        model = data.get("model", "")
+                        if model:
+                            self._worker.switch_model(target, model)
+                            logger.info("Model switched: %s -> %s", target, model)
+                except (json.JSONDecodeError, KeyError) as e:
+                    logger.warning("Invalid model switch message: %s", e)
+        except asyncio.CancelledError:
+            pass
+        except Exception as e:
+            logger.error("Model switch listener error: %s", e)
 
     async def shutdown(self):
         logger.info(f"Gateway {self._instance_id} shutting down...")
@@ -458,51 +500,37 @@ class Gateway:
             )
 
     async def _stats_reporter(self):
-        """Periodic stats reporting and health check with retry on failure."""
-        broker = None
-        _reconnect = True
+        """Periodic stats and health report using main Redis connection."""
+        import time as _time
         while self._running:
-            await asyncio.sleep(60)
-            now = time.monotonic()
-            elapsed = now - self._stats["last_report"]
-            rate = self._stats["processed"] / max(elapsed, 1)
-            logger.info(
-                f"Gateway stats: processed={self._stats['processed']} "
-                f"errors={self._stats['errors']} stale={self._stats['stale']} "
-                f"dropped_low={self._stats['dropped_low']} "
-                f"rate={rate:.1f}/s circuit={self._cb.state} "
-                f"player_q={self._player_queue.qsize()} npc_q={self._npc_queue.qsize()}"
-            )
-            # Try to connect/reconnect broker
-            if broker is None or _reconnect:
-                try:
-                    from src.common.message_broker import RedisBroker
-                    if broker:
-                        await broker.disconnect()
-                    broker = RedisBroker()
-                    await broker.connect()
-                    _reconnect = False
-                except Exception as e:
-                    logger.warning(f"Health broker connect failed: {e}")
-                    broker = None
-                    self._stats["last_report"] = now
-                    continue
-            # Report health
-            if broker:
-                try:
-                    await broker.report_health(
-                        "llm_gateway",
-                        status="alive",
-                        extra={
-                            "processed": self._stats["processed"],
-                            "errors": self._stats["errors"],
-                            "circuit": self._cb.state,
-                        },
-                    )
-                except Exception as e:
-                    logger.warning(f"Health report failed (will retry): {e}")
-                    _reconnect = True
-            self._stats["last_report"] = now
+            # Report health every 30s (using main Redis, no extra connection)
+            try:
+                ts = _time.time()
+                await self._redis.set(
+                    "health:llm_gateway",
+                    json.dumps({
+                        "name": "llm_gateway",
+                        "status": "alive",
+                        "pid": os.getpid(),
+                        "timestamp": ts,
+                        "processed": self._stats["processed"],
+                        "errors": self._stats["errors"],
+                        "circuit": self._cb.state,
+                        "main_model": self._worker._main_model,
+                        "social_model": self._worker._social_model,
+                        "provider": self.cfg.llm_provider,
+                    }),
+                )
+            except Exception as e:
+                logger.warning(f"Gateway health report failed: {e}")
+            # Log stats every 5th health check (150s)
+            if self._stats["processed"] % 5 == 0:
+                logger.info(
+                    f"Gateway stats: processed={self._stats['processed']} "
+                    f"errors={self._stats['errors']} stale={self._stats['stale']} "
+                    f"circuit={self._cb.state}"
+                )
+            await asyncio.sleep(30)
 
 
 # ── Entry Point ───────────────────────────────────

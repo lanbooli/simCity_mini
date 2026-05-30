@@ -140,8 +140,8 @@ class PhysiologyManager:
             if not self.death_cause:
                 self.death_cause = "health_failure"
 
-    def daily_check(self):
-        """Called once per game day. Handles aging and elder death rolls."""
+    def age_one_year(self):
+        """Called ~once per 20 real days. Advances age by 1 year."""
         if self.is_dead:
             return
 
@@ -157,14 +157,19 @@ class PhysiologyManager:
             self.energy = min(self.energy, cap)
             self.social = min(self.social, cap)
 
-        # Elder natural death roll
-        if self._stage == AgeStage.ELDER and self._age >= ELDER_DEATH_BASE_AGE:
-            prob = ELDER_DEATH_BASE_PROB + (self._age - ELDER_DEATH_BASE_AGE) * 0.001
-            prob = min(prob, ELDER_DEATH_MAX_PROB)
-            if random.random() < prob:
-                self.is_dead = True
-                self.death_cause = "old_age"
-                logger.info(f"NPC {self.npc_name} died of old age at {self._age}")
+    def elder_death_check(self):
+        """Called every game midnight. Rolls for natural death if elderly."""
+        if self.is_dead:
+            return
+        if self._stage != AgeStage.ELDER or self._age < ELDER_DEATH_BASE_AGE:
+            return
+
+        prob = ELDER_DEATH_BASE_PROB + (self._age - ELDER_DEATH_BASE_AGE) * 0.001
+        prob = min(prob, ELDER_DEATH_MAX_PROB)
+        if random.random() < prob:
+            self.is_dead = True
+            self.death_cause = "old_age"
+            logger.info(f"NPC {self.npc_name} died of old age at {self._age}")
 
     def recover(self, stat: str, amount: float):
         """Recover a stat by amount. Used when NPC eats/drinks/sleeps/socializes."""
