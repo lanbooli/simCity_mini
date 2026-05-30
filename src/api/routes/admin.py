@@ -465,19 +465,29 @@ async def list_models():
         "social_model": settings.deepseek_social_model if provider == "deepseek" else settings.lmstudio_social_model,
     }
 
+    # Build available model list, fall back to known models if provider unreachable
     available = []
     if provider == "lmstudio":
-        # Query LM Studio for available models
         try:
-            async with httpx.AsyncClient(timeout=5.0) as client:
+            async with httpx.AsyncClient(timeout=3.0) as client:
                 resp = await client.get(f"{settings.lmstudio_base_url}/v1/models")
                 if resp.status_code == 200:
                     data = resp.json()
                     available = [m.get("id", "") for m in data.get("data", [])]
-        except Exception as e:
-            available = [f"(无法获取模型列表: {e})"]
+        except Exception:
+            pass
+        # Fallback: always include currently configured models
+        if not available:
+            available = [
+                settings.lmstudio_model,
+                settings.lmstudio_social_model,
+                "qwen3.6-35b-a3b-uncensored-hauhaucs-aggressive",
+                "qwen3.5-4b-uncensored-hauhaucs-aggressive",
+            ]
     elif provider == "deepseek":
         available = [
+            settings.deepseek_main_model,
+            settings.deepseek_social_model,
             "deepseek-v4-pro",
             "deepseek-v4-flash",
             "deepseek-chat",
@@ -485,6 +495,9 @@ async def list_models():
         ]
     else:
         available = [current["main_model"], current["social_model"]]
+    # Deduplicate while preserving order
+    seen = set()
+    available = [m for m in available if not (m in seen or seen.add(m))]
 
     return {"status": "ok", "data": {"current": current, "available": available}}
 
