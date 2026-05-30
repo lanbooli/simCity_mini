@@ -447,7 +447,7 @@ class Supervisor:
         """Spawn TTS Gateway using mlx_audio venv Python."""
         env = os.environ.copy()
         env["PYTHONPATH"] = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        env["HF_ENDPOINT"] = "https://hf-mirror.com"
+        env["HF_ENDPOINT"] = settings.hf_endpoint
         env["TTS_MODEL_PATH"] = settings.tts_model_path
         env["TTS_NARRATOR_MODEL_PATH"] = settings.tts_narrator_model_path
         env["TTS_NARRATOR_INSTRUCT"] = settings.tts_narrator_instruct

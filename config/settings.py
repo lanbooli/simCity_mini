@@ -62,6 +62,9 @@ class Settings(BaseSettings):
     tts_max_concurrent: int = 3
     tts_cleanup_age_hours: int = 1
 
+    # HuggingFace
+    hf_endpoint: str = "https://huggingface.co"
+
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 
 
