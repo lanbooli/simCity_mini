@@ -8,6 +8,8 @@ Replaces direct LMStudioClient.chat() calls.
 import asyncio
 import json
 import uuid
+import logging
+_log = logging.getLogger("gateway_client")
 from datetime import datetime, timedelta, timezone
 from enum import IntEnum
 from typing import Optional
@@ -172,6 +174,9 @@ class GatewayClient:
 
             # Await response
             result = await asyncio.wait_for(future, timeout=timeout)
+            _log.info("[CLI %s] response status=%s len=%d",
+                       request_id[:8], result.get("status", "?"),
+                       len(result.get("content", "")))
             if result["status"] != "success":
                 raise GatewayError(result.get("error", "Unknown gateway error"))
             return result["content"]

@@ -281,6 +281,8 @@ class GatewayWorker:
         """Process one request. Returns response dict for pub/sub."""
         req_id = request.get("request_id", "?")
         call_type = request.get("call_type", "unknown")
+        logger.info("[REQ %s] type=%s provider=%s main_model=%s",
+                     req_id[:8], call_type, self.cfg.llm_provider, self._main_model)
 
         # Model routing strategy (both models are thinking models, similar speed):
         # 35B (faster per-token, higher quality) → player-facing critical interactions
@@ -520,6 +522,9 @@ class Gateway:
             if reply_to:
                 try:
                     await redis_conn.publish(reply_to, json.dumps(result, ensure_ascii=False))
+                    logger.info("[RSP %s] status=%s len=%d channel=%s",
+                                 req_id[:8], result.get("status", "?"),
+                                 len(result.get("content", "")), reply_to[:30])
                 except Exception as e:
                     logger.error(f"Failed to publish response for {req_id}: {e}")
 
