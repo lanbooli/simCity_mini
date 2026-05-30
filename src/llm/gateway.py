@@ -281,22 +281,23 @@ class GatewayWorker:
         """Process one request. Returns response dict for pub/sub."""
         req_id = request.get("request_id", "?")
         call_type = request.get("call_type", "unknown")
-        logger.info("[REQ %s] type=%s provider=%s main_model=%s",
-                     req_id[:8], call_type, self.cfg.llm_provider, self._main_model)
 
-        # Model routing strategy (both models are thinking models, similar speed):
-        # 35B (faster per-token, higher quality) → player-facing critical interactions
-        # 4B (smaller, more concurrent throughput) → NPC autonomous background chatter
+        # Model routing strategy
         _CRITICAL_TYPES = {
             "player_dialogue", "player_action",
             "confession", "proposal", "breakup", "violation",
         }
         if call_type in _CRITICAL_TYPES:
-            client = self.main_client    # v4-pro (thinking) — quality for player experience
+            client = self.main_client
             use_thinking = self._main_thinking
+            actual_model = self._main_model
         else:
-            client = self.social_client  # v4-flash (non-thinking) — throughput for NPC
+            client = self.social_client
             use_thinking = self._social_thinking
+            actual_model = self._social_model
+
+        logger.info("[REQ %s] type=%s provider=%s model=%s",
+                     req_id[:8], call_type, self.cfg.llm_provider, actual_model)
         try:
             messages = json.loads(request.get("messages_json", "[]"))
             temperature = float(request.get("temperature", "0.7"))

@@ -9,6 +9,8 @@ from __future__ import annotations
 import json
 import httpx
 from config.settings import settings
+import logging
+logger = logging.getLogger("llm_gateway")
 
 
 class LMStudioClient:
@@ -66,7 +68,17 @@ class LMStudioClient:
         )
         resp.raise_for_status()
         data = resp.json()
-        return data["choices"][0]["message"]["content"]
+        choice = data.get("choices", [{}])[0]
+        msg = choice.get("message", {})
+        content = msg.get("content", "") or ""
+        # Log if content is empty but response was successful
+        if not content:
+            logger.warning(
+                "[LMStudio] empty content from model=%s. "
+                "msg keys=%s finish_reason=%s",
+                self.model, list(msg.keys()), choice.get("finish_reason", "?"),
+            )
+        return content
 
     async def chat_stream(self, messages: list[dict], temperature: float = 0.5):
         """Stream chat completion tokens. Yields text chunks."""
