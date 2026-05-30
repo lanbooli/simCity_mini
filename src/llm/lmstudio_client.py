@@ -44,7 +44,13 @@ class LMStudioClient:
         stop: list[str] | None = None,
         thinking: bool = False,
     ) -> str:
-        """Send a chat completion request and return the response text."""
+        """Send a chat completion request and return the response text.
+        
+        Model-specific handling:
+        - DeepSeek: respects thinking flag via API parameter
+        - Qwen/LM Studio: thinking models auto-generate reasoning_content,
+          we strip it and only return content (never reasoning)
+        """
         await self._ensure_client()
 
         payload = {
@@ -53,12 +59,15 @@ class LMStudioClient:
             "temperature": temperature,
             "max_tokens": max_tokens,
         }
-        # DeepSeek thinking mode
+        # DeepSeek thinking mode (explicit API flag)
         if thinking and self.api_key:
             payload["thinking"] = {"type": "enabled"}
-        # repeat_penalty is LM Studio specific, DeepSeek doesn't support it
+        # LM Studio specific
         if not self.api_key:
             payload["repeat_penalty"] = 1.15
+            # For Qwen thinking models on LM Studio: request thinking=disabled
+            # to reduce reasoning_content overhead (not all LM Studio versions respect this)
+            payload["thinking"] = {"type": "disabled"}
         if stop:
             payload["stop"] = stop
 
@@ -71,19 +80,23 @@ class LMStudioClient:
         choice = data.get("choices", [{}])[0]
         msg = choice.get("message", {})
         content = msg.get("content", "") or ""
-        # Fallback: thinking models put output in reasoning_content
-        if not content:
-            reasoning = msg.get("reasoning_content", "") or ""
-            if reasoning:
-                logger.info("[LMStudio] using reasoning_content as fallback "
-                            "(len=%d, finish_reason=%s)",
-                            len(reasoning), choice.get("finish_reason", "?"))
-                return reasoning
+        reasoning = msg.get("reasoning_content", "") or ""
+        finish = choice.get("finish_reason", "?")
+
+        # If content is empty but reasoning exists: model spent all tokens thinking
+        if not content and reasoning:
             logger.warning(
-                "[LMStudio] empty content from model=%s. "
-                "msg keys=%s finish_reason=%s",
-                self.model, list(msg.keys()), choice.get("finish_reason", "?"),
+                "[LMStudio] thinking overflow: reasoning=%d chars, content=empty, "
+                "finish=%s, max_tokens=%d. Increase max_tokens!",
+                len(reasoning), finish, max_tokens,
             )
+            # Do NOT return reasoning — it's internal thought, not user-facing reply
+            return ""
+
+        # Strip reasoning from saved context: only return clean content
+        if reasoning:
+            logger.debug("[LMStudio] stripped %d chars of reasoning_content", len(reasoning))
+
         return content
 
     async def chat_stream(self, messages: list[dict], temperature: float = 0.5):
