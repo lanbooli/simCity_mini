@@ -469,6 +469,7 @@ class Supervisor:
         """Spawn TTS Gateway using mlx_audio venv Python."""
         env = os.environ.copy()
         env["PYTHONPATH"] = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        env["PYTHONDONTWRITEBYTECODE"] = "1"  # never cache .pyc, always use source
         env["HF_ENDPOINT"] = settings.hf_endpoint
         env["TTS_MODEL_PATH"] = settings.tts_model_path
         env["TTS_NARRATOR_MODEL_PATH"] = settings.tts_narrator_model_path
@@ -501,6 +502,7 @@ class Supervisor:
         env = os.environ.copy()
         env.update(config.get("env", {}))
         env["PYTHONPATH"] = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        env["PYTHONDONTWRITEBYTECODE"] = "1"  # never cache .pyc, always use source
 
         cmd = [sys.executable, "-m", config["module"]] + config.get("args", [])
         log_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "logs")

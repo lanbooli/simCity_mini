@@ -65,9 +65,6 @@ class LMStudioClient:
         # LM Studio specific
         if not self.api_key:
             payload["repeat_penalty"] = 1.15
-            # For Qwen thinking models on LM Studio: request thinking=disabled
-            # to reduce reasoning_content overhead (not all LM Studio versions respect this)
-            payload["thinking"] = {"type": "disabled"}
         if stop:
             payload["stop"] = stop
 
