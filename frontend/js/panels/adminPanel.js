@@ -65,6 +65,13 @@ const AdminPanel = {
               点击刷新加载...
             </div>
             <div style="display:flex;gap:4px;margin-bottom:6px;">
+              <select id="adminProvider" class="admin-select" style="flex:1;" onchange="AdminPanel._switchProvider(this.value)">
+                <option value="">🔌 切换提供商...</option>
+                <option value="deepseek">🤖 DeepSeek</option>
+                <option value="lmstudio">🏠 LM Studio</option>
+              </select>
+            </div>
+            <div style="display:flex;gap:4px;margin-bottom:6px;">
               <select id="adminModelTarget" class="admin-select" style="flex:1;">
                 <option value="main">🎯 主模型 (玩家对话)</option>
                 <option value="social">💬 社交模型 (NPC后台)</option>
@@ -399,6 +406,12 @@ const AdminPanel = {
         <br>提供者: ${cur.provider || '?'}
       `;
 
+      // Set current provider in dropdown
+      const providerSelect = document.getElementById('adminProvider');
+      if (providerSelect && cur.provider) {
+        providerSelect.value = cur.provider;
+      }
+
       select.innerHTML = available.map(m => 
         `<option value="${m}">${m}</option>`
       ).join('');
@@ -429,6 +442,28 @@ const AdminPanel = {
       }
     } catch (e) {
       console.error('Admin: switch model failed', e);
+      if (info) info.innerHTML = '❌ 切换失败';
+    }
+  },
+
+  async _switchProvider(provider) {
+    if (!provider) return;
+    const info = document.getElementById('adminModelInfo');
+    try {
+      const res = await fetch('/api/admin/provider/switch', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({provider: provider}),
+      });
+      const json = await res.json();
+      if (json.status === 'ok') {
+        if (info) info.innerHTML = `✅ 已切换到 ${provider}！正在生效...`;
+        setTimeout(() => this._refreshModels(), 2000);
+      } else {
+        if (info) info.innerHTML = `❌ 切换失败`;
+      }
+    } catch (e) {
+      console.error('Admin: switch provider failed', e);
       if (info) info.innerHTML = '❌ 切换失败';
     }
   },

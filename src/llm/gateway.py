@@ -245,6 +245,38 @@ class GatewayWorker:
                 self._social_model = model_name
                 self._social_client = None
 
+    def switch_provider(self, provider: str, **kwargs):
+        """Hot-swap provider (deepseek<->lmstudio) and optionally models.
+        Updates cfg and re-resolves all endpoints/models. Invalidates cached clients."""
+        if provider not in ("deepseek", "lmstudio"):
+            logger.warning("Unknown provider: %s", provider)
+            return
+        if self.cfg.llm_provider == provider and not kwargs:
+            return  # no change
+
+        old_provider = self.cfg.llm_provider
+        self.cfg.llm_provider = provider
+
+        # Optionally update models/base_url/api_key from kwargs
+        if "deepseek_main_model" in kwargs:
+            self.cfg.deepseek_main_model = kwargs["deepseek_main_model"]
+        if "deepseek_social_model" in kwargs:
+            self.cfg.deepseek_social_model = kwargs["deepseek_social_model"]
+        if "deepseek_api_key" in kwargs:
+            self.cfg.deepseek_api_key = kwargs["deepseek_api_key"]
+        if "lmstudio_main_model" in kwargs:
+            self.cfg.lmstudio_main_model = kwargs["lmstudio_main_model"]
+        if "lmstudio_social_model" in kwargs:
+            self.cfg.lmstudio_social_model = kwargs["lmstudio_social_model"]
+
+        # Re-resolve all provider-dependent config
+        self._resolve_provider()
+        # Invalidate both clients — they'll be rebuilt on next use
+        self._main_client = None
+        self._social_client = None
+        logger.info("Provider switched: %s -> %s (main=%s, social=%s)",
+                     old_provider, provider, self._main_model, self._social_model)
+
     async def process(self, request: dict) -> dict:
         """Process one request. Returns response dict for pub/sub."""
         req_id = request.get("request_id", "?")
@@ -376,12 +408,18 @@ class Gateway:
                     continue
                 try:
                     data = json.loads(msg["data"])
-                    if data.get("action") == "switch_model":
+                    action = data.get("action", "")
+                    if action == "switch_model":
                         target = data.get("target", "main")
                         model = data.get("model", "")
                         if model:
                             self._worker.switch_model(target, model)
                             logger.info("Model switched: %s -> %s", target, model)
+                    elif action == "switch_provider":
+                        provider = data.get("provider", "")
+                        if provider:
+                            self._worker.switch_provider(provider, **data.get("kwargs", {}))
+                            logger.info("Provider switched: %s", provider)
                 except (json.JSONDecodeError, KeyError) as e:
                     logger.warning("Invalid model switch message: %s", e)
         except asyncio.CancelledError:

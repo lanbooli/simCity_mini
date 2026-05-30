@@ -499,7 +499,14 @@ async def list_models():
     seen = set()
     available = [m for m in available if not (m in seen or seen.add(m))]
 
-    return {"status": "ok", "data": {"current": current, "available": available}}
+    return {
+        "status": "ok",
+        "data": {
+            "current": current,
+            "available": available,
+            "providers": ["deepseek", "lmstudio"],
+        }
+    }
 
 
 @router.post("/models/switch")
@@ -567,3 +574,33 @@ def _update_env_file(key: str, value: str):
         lines.append(f"{key}={value}")
 
     env_path.write_text("\n".join(lines) + "\n")
+
+@router.post("/provider/switch")
+async def switch_provider(request: dict):
+    """Switch LLM provider (deepseek/lmstudio) immediately via Redis pub/sub."""
+    _require_admin()
+
+    provider = request.get("provider", "").strip()
+    if provider not in ("deepseek", "lmstudio"):
+        raise HTTPException(400, "provider must be 'deepseek' or 'lmstudio'")
+
+    try:
+        import redis
+        r = redis.from_url(REDIS_URL)
+        cmd = json.dumps({
+            "action": "switch_provider",
+            "provider": provider,
+            "kwargs": {},  # future: pass model overrides
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        })
+        r.publish(MODEL_SWITCH_CHANNEL, cmd)
+        r.close()
+
+        # Update .env for persistence
+        _update_env_file("LLM_PROVIDER", provider)
+        settings.llm_provider = provider
+        logger.info("Provider switched to %s", provider)
+        return {"status": "ok", "provider": provider, "message": f"已切换到 {provider}，即时生效"}
+    except Exception as e:
+        logger.error("Provider switch failed: %s", e)
+        raise HTTPException(500, str(e))
