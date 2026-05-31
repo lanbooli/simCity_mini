@@ -415,7 +415,18 @@ class Supervisor:
                         action = cmd.get("action", "")
                         target = cmd.get("process", "")
                         print(f"[supervisor] Admin command: {action} {target}")
-                        if action == "restart" and target in self.children:
+                        if action == "start":
+                            # Start a new process (e.g., resurrected NPC)
+                            if target not in self.children:
+                                config = self._find_config(target)
+                                if config:
+                                    print(f"[supervisor] Starting new process: {target}")
+                                    self._spawn(target, config)
+                                else:
+                                    print(f"[supervisor] No config found for: {target}")
+                            else:
+                                print(f"[supervisor] Process {target} already running, ignoring start")
+                        elif action == "restart" and target in self.children:
                             self._restart_process(target)
                         elif action == "stop" and target in self.children:
                             self._stop_process(target)
@@ -504,7 +515,7 @@ class Supervisor:
         env["PYTHONPATH"] = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         env["PYTHONDONTWRITEBYTECODE"] = "1"  # never cache .pyc, always use source
 
-        cmd = [sys.executable, "-m", config["module"]] + config.get("args", [])
+        cmd = [sys.executable, "-B", "-m", config["module"]] + config.get("args", [])
         log_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "logs")
         os.makedirs(log_dir, exist_ok=True)
         log_file = open(os.path.join(log_dir, f"{name}.log"), "a", buffering=1)

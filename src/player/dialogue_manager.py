@@ -113,24 +113,8 @@ class PlayerDialogueManager:
         except Exception:
             pass
 
-        # Forward response to API via Redis pub/sub — include all fields
-        await self.broker.publish("dialogue:response", {
-            "player_id": self.player_id,
-            "npc_id": npc_id,
-            "npc_name": npc_name,
-            "content": content,
-            "favorability_change": str(favorability_change),
-            "favorability_before": rel_data.get("favorability", 0),
-            "favorability_after": rel_data.get("favorability", 0),
-            "familiarity_after": rel_data.get("familiarity", 0),
-            "mood_before": "",
-            "new_mood": "",
-            "relationship_type": rel_data.get("relationship_type", "stranger"),
-            "game_time": game_time,
-            "audio_url": audio_url,
-            "initiated_by_npc": initiated_by_npc,
-            "action_name": action_name,
-        })
+        # NPC already published complete response via dialogue:response.
+        # Here we only record player memory — no re-publish needed.
 
     @staticmethod
     def _decode(fields: dict, key: str, default: str = "") -> str:

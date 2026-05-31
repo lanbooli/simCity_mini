@@ -9,6 +9,7 @@ Usage: python -m src.llm.gateway
 """
 
 import asyncio
+import os
 import json
 import os
 import signal
@@ -28,6 +29,8 @@ from src.common.utils import setup_logging
 from src.llm.lmstudio_client import LMStudioClient
 
 logger = setup_logging("llm_gateway", settings.log_level)
+
+import re as _pyre
 
 
 # ── Priority ──────────────────────────────────────
@@ -106,13 +109,15 @@ class GatewayConfig:
     deepseek_base_url: str = "https://api.deepseek.com"
     deepseek_main_model: str = "deepseek-v4-pro"
     deepseek_social_model: str = "deepseek-v4-flash"
+    lmstudio_pet_model: str = ""
+    deepseek_pet_model: str = ""
     deepseek_main_thinking: bool = True  # v4-pro uses thinking mode for quality
     # LM Studio
     lmstudio_base_url: str = ""
     lmstudio_main_model: str = ""
     lmstudio_social_model: str = ""
-    request_timeout: float = 120.0
-    circuit_threshold: int = 5
+    request_timeout: float = 300.0
+    circuit_threshold: int = 10
     circuit_recovery: float = 30.0
     retry_max: int = 3
     retry_base_delay: float = 1.0
@@ -136,6 +141,8 @@ def _decode_fields(fields: dict) -> dict:
 TOKEN_BUDGETS = {
     "player_dialogue": 4000,
     "player_action": 3500,
+    "pet_dialogue": 3500,
+    "pet_action": 3500,
     "social_open": 1500,
     "social_reply": 1500,
     "greeting": 1000,
@@ -179,6 +186,97 @@ def _safety_trim(messages: list[dict], call_type: str) -> list[dict]:
 
 # ── Gateway Worker ────────────────────────────────
 
+# ── Central LLM Response Cleaner ─────────────────
+
+# Inline thinking patterns from Qwen models (English meta-reasoning mid-content)
+_QWEN_THINK_PATTERNS = [
+    r'\n\s*Wait[,.]?\s', r'\n\s*Let me\s', r'\n\s*I (want|need|should|will|can|must|think)\s',
+    r"\n\s*Here.s\s", r"\n\s*Let.s\s", r'\n\s*First[,.]?\s',
+    r'\n\s*The (user|player|instruction|request|prompt)\s',
+    r'\n\s*This (is|means|suggests|appears)\s',
+    r'\n\s*"[^"]*"\s*->\s*No\.',
+]
+
+# Hallucinated player continuations: model starts generating "Player: ..." etc
+_PLAYER_HALLUCINATION_PATS = [
+    r'\n\s*玩家[：:].*$',
+    r'\n\s*Player[：:].*$',
+    r'\n\s*\[Player\].*$',
+]
+
+
+def _clean_by_model(model_name: str, raw: dict) -> str:
+    """Central LLM response cleaner. Model-name-driven.
+
+    Args:
+        model_name: e.g. "qwen3.6-35b-...", "deepseek-v4-pro", "gemma4-..."
+        raw: {"content": str, "reasoning": str, "finish_reason": str}
+
+    Returns:
+        Clean content text, ready for game logic (favorability parsing, etc.)
+    """
+    model_lower = model_name.lower()
+    content = raw.get("content", "") or ""
+    reasoning = raw.get("reasoning", "") or ""
+    finish = raw.get("finish_reason", "?")
+
+    # ── Handle thinking overflow: model spent all tokens thinking ──
+    if not content and reasoning:
+        import logging as _gwlog
+        _gwlog.getLogger("llm_gateway").warning(
+            "[CLEAN] %s thinking overflow: reasoning=%d chars, finish=%s, max_tokens depleted. "
+            "Returning empty — caller should retry with higher max_tokens or handle fallback.",
+            model_name[:30], len(reasoning), finish,
+        )
+        # Do NOT use reasoning as fallback: Qwen reasoning is English meta-thinking,
+        # not a valid game response. Caller (dialogue.py) has its own fallback logic.
+        return ""
+
+    # ── Strip reasoning_content field (never leaked to game) ──
+    # Already handled above; if content has text, reasoning is just logged
+    if reasoning:
+        import logging as _gwlog2
+        _gwlog2.getLogger("llm_gateway").debug(
+            "[CLEAN] %s stripped %d chars of reasoning_content", model_name[:30], len(reasoning)
+        )
+
+    if not content:
+        return ""
+
+    # ── Qwen models: strip inline thinking patterns ──
+    if "qwen" in model_lower:
+        import re as _qre
+        for pat in _QWEN_THINK_PATTERNS:
+            m = _qre.search(pat, content, _qre.IGNORECASE)
+            if m:
+                content = content[:m.start()]
+                break
+
+    # ── Gemma models: strip channel markers ──
+    if "gemma" in model_lower:
+        content = _pyre.sub(r'<\$channel\$>thought\s*', '', content)
+        content = _pyre.sub(r'<\$channel\$>', '', content)
+        content = _pyre.sub(r'<\|channel>thought\s*', '', content)
+        content = _pyre.sub(r'<channel\|>', '', content)
+        content = _pyre.sub(r'^\s*use_thought\s*', '', content)
+        content = _pyre.sub(r'</?thought>', '', content)
+        content = _pyre.sub(r'<\$[^>]*>', '', content)
+        content = _pyre.sub(r'<\|?channel[^>]*>', '', content)
+
+    # ── Universal: strip hallucinated player continuations ──
+    for pat in _PLAYER_HALLUCINATION_PATS:
+        m = _pyre.search(pat, content, _pyre.IGNORECASE)
+        if m:
+            content = content[:m.start()]
+            break
+
+    # ── Trim whitespace ──
+    content = content.strip()
+
+    return content
+
+
+
 class GatewayWorker:
     def __init__(self, cfg: GatewayConfig, circuit_breaker: CircuitBreaker):
         self.cfg = cfg
@@ -196,9 +294,11 @@ class GatewayWorker:
             self._social_base_url = self.cfg.deepseek_base_url
             self._social_model = self.cfg.deepseek_social_model
             self._social_thinking = False  # v4-flash no thinking for speed/cost
+            self._pet_model = self.cfg.deepseek_pet_model or self.cfg.deepseek_main_model
+            self._pet_thinking = self._main_thinking
             self._api_key = self.cfg.deepseek_api_key
-            logger.info("GatewayWorker using DeepSeek: main=%s (thinking=%s), social=%s",
-                         self._main_model, self._main_thinking, self._social_model)
+            logger.info("GatewayWorker using DeepSeek: main=%s (thinking=%s), social=%s, pet=%s",
+                         self._main_model, self._main_thinking, self._social_model, self._pet_model)
         else:
             self._main_base_url = self.cfg.lmstudio_base_url
             self._main_model = self.cfg.lmstudio_main_model
@@ -206,9 +306,20 @@ class GatewayWorker:
             self._social_base_url = self.cfg.lmstudio_base_url
             self._social_model = self.cfg.lmstudio_social_model
             self._social_thinking = False
+            self._pet_model = self.cfg.lmstudio_pet_model or self.cfg.lmstudio_main_model
+            self._pet_thinking = self._main_thinking
             self._api_key = ""
-            logger.info("GatewayWorker using LM Studio: main=%s, social=%s",
-                         self._main_model, self._social_model)
+            logger.info("GatewayWorker using LM Studio: main=%s, social=%s, pet=%s",
+                         self._main_model, self._social_model, self._pet_model)
+
+    @property
+    def pet_client(self) -> LMStudioClient:
+        if self._pet_client is None:
+            self._pet_client = LMStudioClient(
+                base_url=self._main_base_url,
+                model=self._pet_model,
+            )
+        return self._pet_client
 
     @property
     def main_client(self) -> LMStudioClient:
@@ -217,7 +328,7 @@ class GatewayWorker:
                 base_url=self._main_base_url,
                 model=self._main_model,
                 api_key=self._api_key,
-                timeout=self.cfg.request_timeout,
+                timeout=self.cfg.request_timeout or float(os.environ.get("LLM_TIMEOUT_SECONDS", "300")),
             )
         return self._main_client
 
@@ -228,7 +339,7 @@ class GatewayWorker:
                 base_url=self._social_base_url,
                 model=self._social_model,
                 api_key=self._api_key,
-                timeout=self.cfg.request_timeout,
+                timeout=self.cfg.request_timeout or float(os.environ.get("LLM_TIMEOUT_SECONDS", "300")),
             )
         return self._social_client
 
@@ -244,6 +355,7 @@ class GatewayWorker:
                 logger.info("Switching social model: %s -> %s", self._social_model, model_name)
                 self._social_model = model_name
                 self._social_client = None
+        self._pet_client = None
 
     def switch_provider(self, provider: str, **kwargs):
         """Hot-swap provider (deepseek<->lmstudio) and optionally models.
@@ -287,7 +399,12 @@ class GatewayWorker:
             "player_dialogue", "player_action",
             "confession", "proposal", "breakup", "violation",
         }
-        if call_type in _CRITICAL_TYPES:
+        _PET_TYPES = {"pet_dialogue", "pet_action"}
+        if call_type in _PET_TYPES:
+            client = self.pet_client
+            use_thinking = self._pet_thinking
+            actual_model = self._pet_model
+        elif call_type in _CRITICAL_TYPES:
             client = self.main_client
             use_thinking = self._main_thinking
             actual_model = self._main_model
@@ -313,6 +430,8 @@ class GatewayWorker:
             return self._error_response(req_id, "Circuit breaker open — LM Studio unavailable")
 
         last_error = ""
+        logger.debug("[GW %s] payload: model=%s max_tokens=%d thinking=%s msg_count=%d", 
+                     req_id[:8], actual_model, max_tokens, use_thinking, len(messages))
         for attempt in range(self.cfg.retry_max):
             try:
                 raw = await client.chat(
@@ -320,15 +439,17 @@ class GatewayWorker:
                     max_tokens=max_tokens, stop=stop,
                     thinking=use_thinking,
                 )
+                clean_text = _clean_by_model(actual_model, raw)
                 self.cb.record_success()
                 return {
                     "request_id": req_id,
                     "status": "success",
-                    "content": raw,
+                    "content": clean_text,
                     "error": "",
                 }
             except Exception as e:
                 last_error = f"{type(e).__name__}: {e}"
+                logger.warning("[GW %s] LLM error details: %s", req_id[:8], last_error)
                 self.cb.record_failure()
                 if self.cb.is_open:
                     break
@@ -378,6 +499,24 @@ class Gateway:
             except aioredis.ResponseError as e:
                 if "BUSYGROUP" not in str(e):
                     raise
+
+        # Cleanup orphaned pending entries from previous gateway instances
+        for stream in (self.cfg.player_stream, self.cfg.npc_stream):
+            try:
+                # XPENDING stream group - + - count: get pending entries
+                pending_entries = await self._redis.xpending(
+                    stream, self.cfg.consumer_group,
+                    min="-", max="+", count=1000,
+                )
+                ids_to_ack = []
+                for entry in pending_entries:
+                    msg_id = entry["message_id"] if isinstance(entry, dict) else entry[0]
+                    ids_to_ack.append(msg_id)
+                if ids_to_ack:
+                    acked = await self._redis.xack(stream, self.cfg.consumer_group, *ids_to_ack)
+                    logger.info("Cleaned %d orphaned pending messages from %s", acked, stream)
+            except Exception as e:
+                logger.debug("Startup cleanup %s: %s (likely no pending)", stream, str(e)[:60])
 
         self._running = True
         consumer_name = f"gateway_{self._instance_id}"

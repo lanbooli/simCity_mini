@@ -14,6 +14,9 @@ cleanup() {
 trap cleanup SIGINT SIGTERM
 
 echo "🧹 清理旧进程..."
+echo "🧹 清理 Python 缓存..."
+find src -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
+find src -name "*.pyc" -delete 2>/dev/null || true
 lsof -ti :8000 | xargs kill -9 2>/dev/null || true
 sleep 0.5
 
@@ -33,13 +36,37 @@ done
 
 open http://localhost:8000 2>/dev/null || true
 
-# Swift 桌面宠物
+# ── Swift 桌面宠物（自动编译 + 启动）────────────────
+PET_SRC="desktop_pet/native/PetApp.swift"
+PET_WIN="desktop_pet/native/PetWindow.swift"
 PET_BIN="desktop_pet/native/PetApp"
-if [ -f "$PET_BIN" ]; then
-    echo "🐱 启动桌面宠物..."
-    ./"$PET_BIN" &
-else
-    echo "💡 桌面宠物未编译：cd desktop_pet/native && swiftc PetApp.swift -o PetApp -framework SwiftUI -framework AppKit -framework AVFoundation"
+PET_DIR="desktop_pet/native"
+
+if [ -f "$PET_SRC" ]; then
+    NEED_BUILD=0
+    if [ ! -f "$PET_BIN" ]; then
+        NEED_BUILD=1
+    elif [ "$PET_SRC" -nt "$PET_BIN" ] || [ "$PET_WIN" -nt "$PET_BIN" ]; then
+        NEED_BUILD=1
+    fi
+
+    if [ "$NEED_BUILD" -eq 1 ]; then
+        echo "🔨 编译桌面宠物..."
+        if command -v swiftc &>/dev/null; then
+            (cd "$PET_DIR" && swiftc main.swift PetApp.swift -o PetApp -framework SwiftUI -framework AppKit -framework AVFoundation 2>&1) && echo "✅ 编译成功" || {
+                echo "⚠️  编译失败，使用旧版本（如有）"
+            }
+        elif command -v xcodebuild &>/dev/null; then
+            echo "⚠️  swiftc 不可用，请用 Xcode 编译"
+        fi
+    fi
+
+    if [ -f "$PET_BIN" ]; then
+        echo "🐱 启动桌面宠物..."
+        ./"$PET_BIN" &
+    else
+        echo "💡 桌面宠物未编译：cd $PET_DIR && swiftc main.swift PetApp.swift -o PetApp -framework SwiftUI -framework AppKit -framework AVFoundation"
+    fi
 fi
 
 echo "🌟 全部就绪 (Ctrl+C 停止)"

@@ -88,9 +88,14 @@ def seed_data(conn):
             execute(c, """INSERT OR IGNORE INTO scene_npc(scene_id, npc_id, role) VALUES(?, ?, 'resident')""",
                     (home_id, t["id"]))
 
-        # Goals
+        # Goals (skip if entity already has this exact goal)
         for g in t.get("goals", []):
-            execute(c, """INSERT OR IGNORE INTO goal(id, entity_id, entity_type, goal_type, description,
+            existing = fetch_one(c,
+                "SELECT id FROM goal WHERE entity_id = ? AND description = ?",
+                (t["id"], g["description"]))
+            if existing:
+                continue
+            execute(c, """INSERT INTO goal(id, entity_id, entity_type, goal_type, description,
                           priority, is_short_term, status)
                           VALUES(?, ?, 'npc', ?, ?, ?, ?, 'active')""",
                     (gen_id(), t["id"], g["goal_type"], g["description"],

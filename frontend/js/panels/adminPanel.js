@@ -146,11 +146,12 @@ const AdminPanel = {
     list.innerHTML = npcs.map(n => {
       const moodMap = {happy:'😊', neutral:'😐', sad:'😢', angry:'😤', excited:'🤩', bored:'😴', fear:'😨', traumatized:'💔'};
       const mood = moodMap[n.current_mood] || '😐';
-      const active = n.is_active ? '' : ' (停用)';
+      const deadBadge = n.is_dead ? ' <span class="admin-dead-badge">☠️已死</span>' : '';
+      const inactiveBadge = (!n.is_active && !n.is_dead) ? ' (停用)' : '';
       const attrs = n.attributes || {};
       const sel = this._selectedNpcId === n.id ? 'admin-npc-item selected' : 'admin-npc-item';
       return `<div class="${sel}" onclick="AdminPanel._selectNpc('${n.id}')">
-        <span>${mood}</span> <strong>${n.name}</strong>${active}
+        <span>${mood}</span> <strong>${n.name}</strong>${deadBadge}${inactiveBadge}
         <span style="font-size:9px;color:#999"> S${attrs.stamina||5} P${attrs.speed||5} T${attrs.strength||5}</span>
       </div>`;
     }).join('') || '<div class="admin-empty">无匹配NPC</div>';
@@ -183,9 +184,26 @@ const AdminPanel = {
       const attrs = npc.attributes || {};
       const presetTargetGender = npc.gender === 'male' ? 'female' : 'male';
 
+      const isDead = npc.is_dead || 0;
+      const deathCause = npc.death_cause || '';
+      const favVal = playerRel?.favorability ?? 0;
+      const famVal = playerRel?.familiarity ?? 0;
+      const comfortVal = playerRel?.intimacy_comfort ?? 0;
+      const jealousyVal = playerRel?.jealousy_level ?? 0;
+      const relType = playerRel?.relationship_type || 'stranger';
+      const avatarUrl = npc.appearance?.avatar || '';
+
       detail.innerHTML = `
         <div class="admin-card">
-          <h3>${npc.name} <small>(${npcId})</small></h3>
+          <div class="admin-card-header">
+            ${avatarUrl ? `<img src="${avatarUrl}" class="admin-avatar" onerror="this.style.display='none'">` : '<div class="admin-avatar admin-avatar-placeholder">?</div>'}
+            <div>
+              <h3>${npc.name} <small>(${npcId})</small></h3>
+              ${isDead ? '<span class="admin-dead-badge" style="font-size:12px">☠️ 已死亡</span>' : ''}
+              ${isDead && deathCause ? `<div style="font-size:11px;color:#ff5252;margin:2px 0">死因：${deathCause}</div>` : ''}
+              ${isDead ? `<button onclick="AdminPanel._resurrectNpc('${npcId}')" class="admin-btn-sm" style="margin-top:4px;background:#e74c3c;color:#fff">💫 复活</button>` : ''}
+            </div>
+          </div>
           <div class="admin-card-section">
             <div class="admin-label">🏷️ 基础属性</div>
             <div class="admin-row">
@@ -251,22 +269,44 @@ const AdminPanel = {
               <button onclick="AdminPanel._setRelPreset('${npcId}','spouse','${presetTargetGender}')" class="admin-btn-sm">💒配偶</button>
               <button onclick="AdminPanel._setRelPreset('${npcId}','enemy','${presetTargetGender}')" class="admin-btn-sm">💢仇敌</button>
             </div>
-            ${playerRel ? `
-            <div style="font-size:11px;margin-top:4px">
-              好感: ${playerRel.favorability||0} | 熟悉: ${playerRel.familiarity||0} | 亲密: ${playerRel.intimacy_comfort||0}
-              <br>类型: ${playerRel.relationship_type||'stranger'} | 吃醋: ${playerRel.jealousy_level||0}
-            </div>` : '<div style="font-size:11px;color:#999">无现有关系</div>'}
+            <div class="admin-rel-editor">
+              <div class="admin-rel-row">
+                <span>好感度</span>
+                <input type="number" id="relFav-${npcId}" value="${favVal}" min="-100" max="100" style="width:70px">
+              </div>
+              <div class="admin-rel-row">
+                <span>熟悉度</span>
+                <input type="number" id="relFam-${npcId}" value="${famVal}" min="0" max="100" style="width:70px">
+              </div>
+              <div class="admin-rel-row">
+                <span>亲密舒适</span>
+                <input type="number" id="relComfort-${npcId}" value="${comfortVal}" min="0" max="100" style="width:70px">
+              </div>
+              <div class="admin-rel-row">
+                <span>吃醋等级</span>
+                <input type="number" id="relJealousy-${npcId}" value="${jealousyVal}" min="0" max="100" style="width:70px">
+              </div>
+              <button onclick="AdminPanel._saveRelValues('${npcId}','${presetTargetGender}')" class="admin-btn-sm" style="margin-top:4px;width:100%">💾 保存关系数值</button>
+            </div>
           </div>
           <div class="admin-card-section">
-            <div class="admin-label">🖼️ 头像</div>
-            <div style="display:flex;align-items:center;gap:8px;margin-top:4px">
-              ${npc.appearance?.avatar ? `<img src="${npc.appearance.avatar}" style="width:48px;height:48px;border-radius:50%;object-fit:cover">` : '<span style="color:#999">无头像</span>'}
-              <span style="font-size:11px;color:#999">${npc.appearance?.avatar || '无头像'}</span>
+            <div class="admin-label">🧠 记忆 <button onclick="AdminPanel._loadMemories('${npcId}')" class="admin-btn-sm" style="margin-left:8px">🔄 加载</button></div>
+            <div id="adminMemories-${npcId}" class="admin-memory-list">
+              <div class="admin-empty">点击加载查看记忆</div>
+            </div>
+          </div>
+          <div class="admin-card-section">
+            <div class="admin-label">💬 对话记录 <button onclick="AdminPanel._loadDialogues('${npcId}')" class="admin-btn-sm" style="margin-left:8px">🔄 加载</button></div>
+            <div id="adminDialogues-${npcId}" class="admin-dialogue-list">
+              <div class="admin-empty">点击加载查看对话</div>
             </div>
           </div>
         </div>`;
     } catch (e) {
       console.error('Admin: failed to load NPC detail', e);
+      const detail = document.getElementById('adminDetail');
+      if (detail) detail.innerHTML = `<div class="admin-placeholder">❌ 加载NPC失败：${e.message || '未知错误'}<br><br>
+        <button onclick="AdminPanel._selectNpc('${npcId}')" class="admin-btn-sm">🔄 重试</button></div>`;
     }
   },
 
@@ -353,6 +393,117 @@ const AdminPanel = {
       }),
     });
     this._selectNpc(npcId);
+  },
+
+  async _resurrectNpc(npcId) {
+    const ageStr = prompt('请输入复活后的年龄（1-120）：', '25');
+    if (!ageStr) return;
+    const age = parseInt(ageStr);
+    if (isNaN(age) || age < 1 || age > 120) {
+      alert('年龄必须在1-120之间');
+      return;
+    }
+    if (!confirm(`确定复活并设置为 ${age} 岁吗？`)) return;
+    try {
+      const res = await fetch(`/api/admin/npcs/${npcId}/resurrect`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ age: age }),
+      });
+      const json = await res.json();
+      if (json.status === 'ok') {
+        alert(json.data.message || `复活成功，年龄已重置为 ${json.data.new_age || age} 岁`);
+        this._refreshAll();
+      }
+    } catch (e) {
+      console.error('Resurrect failed', e);
+    }
+  },
+
+  async _saveRelValues(npcId, targetGender) {
+    const fav = parseInt(document.getElementById(`relFav-${npcId}`)?.value) || 0;
+    const fam = parseInt(document.getElementById(`relFam-${npcId}`)?.value) || 0;
+    const comfort = parseInt(document.getElementById(`relComfort-${npcId}`)?.value) || 0;
+    const jealousy = parseInt(document.getElementById(`relJealousy-${npcId}`)?.value) || 0;
+
+    const body = {
+      entity_a_id: npcId,
+      entity_a_type: 'npc',
+      entity_b_id: 'player_001',
+      entity_b_type: 'player',
+      favorability: fav,
+      familiarity: fam,
+      intimacy_comfort: comfort,
+      jealousy_level: jealousy,
+    };
+    await fetch('/api/admin/relationships', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(body),
+    });
+    // Reverse
+    body.entity_a_id = 'player_001';
+    body.entity_a_type = 'player';
+    body.entity_b_id = npcId;
+    body.entity_b_type = 'npc';
+    await fetch('/api/admin/relationships', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(body),
+    });
+    this._selectNpc(npcId);
+  },
+
+  async _loadMemories(npcId) {
+    const el = document.getElementById(`adminMemories-${npcId}`);
+    if (!el) return;
+    el.innerHTML = '<div class="admin-empty">加载中...</div>';
+    try {
+      const res = await fetch(`/api/admin/npcs/${npcId}/memories?limit=30`);
+      const json = await res.json();
+      const memories = json.data || [];
+      if (memories.length === 0) {
+        el.innerHTML = '<div class="admin-empty">无记忆记录</div>';
+        return;
+      }
+      el.innerHTML = memories.map(m => `
+        <div class="admin-memory-item">
+          <div class="admin-memory-time">${(m.game_time||'').substring(0,16)} | ${m.memory_type} | ⭐${m.importance}</div>
+          <div>${this._escapeHtml(m.content)}</div>
+        </div>
+      `).join('');
+    } catch (e) {
+      el.innerHTML = '<div class="admin-empty">加载失败</div>';
+    }
+  },
+
+  async _loadDialogues(npcId) {
+    const el = document.getElementById(`adminDialogues-${npcId}`);
+    if (!el) return;
+    el.innerHTML = '<div class="admin-empty">加载中...</div>';
+    try {
+      const res = await fetch(`/api/admin/npcs/${npcId}/dialogues?limit=30`);
+      const json = await res.json();
+      const dialogues = json.data || [];
+      if (dialogues.length === 0) {
+        el.innerHTML = '<div class="admin-empty">无对话记录</div>';
+        return;
+      }
+      el.innerHTML = dialogues.map(d => `
+        <div class="admin-dialogue-item">
+          <div class="admin-dialogue-time">${(d.game_time||'').substring(0,16)} | ${d.speaker_type==='npc'?'🤖NPC':'👤玩家'}</div>
+          <div>${this._escapeHtml(d.content).substring(0,100)}</div>
+        </div>
+      `).join('');
+    } catch (e) {
+      el.innerHTML = '<div class="admin-empty">加载失败</div>';
+    }
+  },
+
+  _escapeHtml(s) {
+    const div = document.createElement('div');
+    div.textContent = s || '';
+    return div.innerHTML;
   },
 
   // ── Game state ──

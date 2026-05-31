@@ -181,6 +181,17 @@ class PhysiologyManager:
         if stat == "social":
             self._hours_since_social = 0.0
 
+    def recover_tick(self, rates: dict):
+        """Recover stats per tick based on rates dict {stat: amount_per_minute}."""
+        if self.is_dead:
+            return
+        cap = AGE_CONFIG[self._stage]["stat_cap"] * 100.0
+        for stat, amount in rates.items():
+            if stat == "social":
+                self._hours_since_social = 0.0
+            current = getattr(self, stat)
+            setattr(self, stat, min(cap, current + amount))
+
     def crisis(self) -> str | None:
         """Return current crisis type, or None. Thirst > hunger > energy priority."""
         if self.is_dead:

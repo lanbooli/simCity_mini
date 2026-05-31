@@ -32,6 +32,8 @@ class Priority(IntEnum):
 TOKEN_BUDGETS = {
     "player_dialogue": 4000,
     "player_action": 3500,
+    "pet_dialogue": 3500,
+    "pet_action": 3500,
     "social_open": 1500,
     "social_reply": 1500,
     "greeting": 1000,
@@ -52,6 +54,8 @@ TOKEN_BUDGETS = {
 PRIORITY_MAP = {
     "player_dialogue": Priority.CRITICAL,
     "player_action": Priority.CRITICAL,
+    "pet_dialogue": Priority.CRITICAL,
+    "pet_action": Priority.CRITICAL,
     "social_open": Priority.HIGH,
     "social_reply": Priority.HIGH,
     "greeting": Priority.MEDIUM,
@@ -75,19 +79,21 @@ PRIORITY_MAP = {
 LLM_PARAMS = {
     "player_dialogue":    {"max_tokens": 8192, "temperature": 0.7},
     "player_action":      {"max_tokens": 8192, "temperature": 0.7},
+    "pet_dialogue":      {"max_tokens": 8192, "temperature": 0.7},
+    "pet_action":        {"max_tokens": 8192, "temperature": 0.7},
     "confession":         {"max_tokens": 8192, "temperature": 0.8},
     "proposal":           {"max_tokens": 8192, "temperature": 0.8},
     "breakup":            {"max_tokens": 8192, "temperature": 0.8},
     "violation":          {"max_tokens": 8192, "temperature": 0.8},
     "social_open":        {"max_tokens": 4096, "temperature": 0.7},
     "social_reply":       {"max_tokens": 4096, "temperature": 0.7},
-    "greeting":           {"max_tokens": 2048, "temperature": 0.8},
-    "action_narrative":   {"max_tokens": 4096, "temperature": 0.8},
-    "inner_thought":      {"max_tokens": 2048, "temperature": 0.5},
-    "post":               {"max_tokens": 4096, "temperature": 0.8},
-    "comment_reply":      {"max_tokens": 2048, "temperature": 0.8},
-    "goal_eval":          {"max_tokens": 2048, "temperature": 0.5},
-    "social_performance": {"max_tokens": 4096, "temperature": 0.8},
+    "greeting":           {"max_tokens": 8192, "temperature": 0.8},
+    "action_narrative":   {"max_tokens": 8192, "temperature": 0.8},
+    "inner_thought":      {"max_tokens": 8192, "temperature": 0.5},
+    "post":               {"max_tokens": 8192, "temperature": 0.8},
+    "comment_reply":      {"max_tokens": 4096, "temperature": 0.8},
+    "goal_eval":          {"max_tokens": 4096, "temperature": 0.5},
+    "social_performance": {"max_tokens": 8192, "temperature": 0.8},
 }
 
 def get_llm_params(call_type):
@@ -136,8 +142,8 @@ NPC_STREAM = "stream:llm:npc"
 # Call types that go to the player-dedicated stream
 PLAYER_CALL_TYPES = {
     "player_dialogue", "player_action",
+    "pet_dialogue", "pet_action",
     "confession", "proposal", "breakup", "violation",
-    "greeting", "action_narrative",
 }
 
 

@@ -261,8 +261,8 @@ async def _get_occupied_rooms(residents: list[str]) -> set[str]:
 # ── WebSocket ──────────────────────────────────────
 
 @app.websocket("/ws/game")
-async def game_websocket(ws: WebSocket, player_id: str = "player_001"):
-    await ws_manager.connect(player_id, ws)
+async def game_websocket(ws: WebSocket, player_id: str = "player_001", client: str = "web"):
+    await ws_manager.connect(player_id, ws, client)
     logger.info(f"WS connect: player={player_id}")
     try:
         while True:
@@ -431,6 +431,49 @@ async def game_websocket(ws: WebSocket, player_id: str = "player_001"):
                     "npc_id": npc_id,
                     "content": content,
                 }})
+
+            # ── Date system ──────
+            elif msg_type == "date_invite":
+                d = msg.get("data", {})
+                npc_id = d.get("npc_id", "")
+                activity = d.get("activity", "喝咖啡")
+                date_scene = d.get("scene_id", "scene_coffee_shop")
+                if not npc_id:
+                    await ws.send_json({"type": "error", "data": {"code": "invalid_date", "message": "缺少NPC"}})
+                    continue
+                logger.info(f"WS date_invite: player={player_id} npc={npc_id} activity={activity}")
+                source = "pet" if ws_manager.is_pet(ws) else "web"
+                await broker.stream_add(f"stream:dialogue:{npc_id}", {
+                    "player_id": player_id,
+                    "npc_id": npc_id,
+                    "content": "/date_invite",
+                    "source": source,
+                    "date_activity": activity,
+                    "date_scene": date_scene,
+                })
+
+            elif msg_type == "date_leave":
+                d = msg.get("data", {})
+                npc_id = d.get("npc_id", "")
+                if npc_id:
+                    logger.info(f"WS date_leave: player={player_id} npc={npc_id}")
+                    await broker.stream_add(f"stream:dialogue:{npc_id}", {
+                        "player_id": player_id,
+                        "npc_id": npc_id,
+                        "content": "/date_leave",
+                    })
+
+            elif msg_type == "date_home_response":
+                d = msg.get("data", {})
+                npc_id = d.get("npc_id", "")
+                accept = d.get("accept", False)
+                if npc_id:
+                    logger.info(f"WS date_home_response: player={player_id} npc={npc_id} accept={accept}")
+                    await broker.stream_add(f"stream:dialogue:{npc_id}", {
+                        "player_id": player_id,
+                        "npc_id": npc_id,
+                        "content": "/date_home_accept" if accept else "/date_home_reject",
+                    })
 
     except WebSocketDisconnect:
         logger.info(f"WS disconnect: player={player_id}")

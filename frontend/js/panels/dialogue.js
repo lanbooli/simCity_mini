@@ -106,6 +106,7 @@ const Dialogue = {
     this._initDrag();
     this._initMaximize();
     this._initAudioIndicator();
+    this._initDateSystem();
   },
 
   _initActionPanel() {
@@ -206,6 +207,7 @@ const Dialogue = {
       if (header) header.innerHTML = '<span class="dialogue-placeholder">选择一个NPC开始对话 💬</span>';
       if (relDiv) relDiv.style.display = 'none';
       this.enableInput(false);
+      this._showDateButton(false);
       this._stopIdle();
       Store.clearDialogue();
       return;
@@ -231,10 +233,13 @@ const Dialogue = {
         const rel = await API.getNpcRelationship(npcId, Store.get('playerId'));
         Store.set('selectedNpcDetail', { ...npc, relationship: rel });
         this._renderActionButtons();
+        this._showDateButton(true);
+        this._updateDialogueScene(npc);
 
         if (header) {
           header.innerHTML = `
             <span style="font-weight:700;font-size:13px;">💬 与 ${npc.name} 对话</span>
+            <span style="font-size:10px;color:rgba(255,255,255,0.5);display:block;margin-top:1px;" id="dialogueScene">📍 加载中...</span>
             <div class="dialogue-relationship" id="dialogueRel" style="display:flex;">
               <span class="rel-type">${this._relCn(rel.relationship_type || 'stranger')}</span>
               <div class="rel-bars">
@@ -251,6 +256,7 @@ const Dialogue = {
               </div>
             </div>
             <div class="dialogue-header-actions">
+              <button class="btn-header-icon" id="btnDialogueDate" title="邀请约会">💕</button>
               <button class="btn-header-icon" id="btnDebugRel" title="关系调试" onclick="Dialogue._toggleDebugRel()">⚙️</button>
               <button class="btn-header-icon" id="btnDialogueMax" title="最大化聊天框">⤢</button>
             </div>`;
@@ -344,7 +350,7 @@ const Dialogue = {
       el.innerHTML = '<div class="empty-hint">👋 点击场景中的NPC开始对话吧！</div>';
       return;
     }
-    const sorted = [...msgs].sort((a, b) => (a._seq || a._ts || 0) - (b._seq || b._ts || 0));
+    const sorted = [...msgs].filter(m => !m._isAmbient).sort((a, b) => (a._seq || a._ts || 0) - (b._seq || b._ts || 0));
     el.innerHTML = sorted.map((m, mi) => {
       const replayBtn = (m.speakerType === 'npc')
         ? `<div class="msg-replay-row"><button class="btn-replay-msg" data-msg-idx="${mi}" title="重播语音" onclick="Dialogue._replayMsgAudio(this)">🔊 重播</button></div>`
@@ -464,7 +470,7 @@ const Dialogue = {
     }
     const msgIdx = parseInt(btn.dataset.msgIdx);
     const msgs = Store.get('dialogueMessages') || [];
-    const sorted = [...msgs].sort((a, b) => (a._seq || a._ts || 0) - (b._seq || b._ts || 0));
+    const sorted = [...msgs].filter(m => !m._isAmbient).sort((a, b) => (a._seq || a._ts || 0) - (b._seq || b._ts || 0));
     const m = sorted[msgIdx];
     if (!m) { console.log('[Replay] message not found at index', msgIdx); return; }
     console.log('[Replay] attempting replay for msg idx', msgIdx, 'npc:', m.speakerName);
@@ -1168,5 +1174,351 @@ const Dialogue = {
       if (btn) btn.textContent = '失败';
     }
     setTimeout(() => { if (btn) { btn.textContent = '应用'; btn.disabled = false; } }, 1500);
+  },
+
+  // ── Date System ───────────────────────────────
+
+  // Date timing (sync with backend NpcProcess constants)
+  DATE_TOTAL: 90,           // game-minutes per date phase
+  HOME_INVITE_SECONDS: 300, // = 75 game-min × 4 sec/min @15x
+
+  _dateState: {
+    inDate: false,
+    npcId: '',
+    npcName: '',
+    phase: '',        // 'location' | 'home'
+    activity: '',
+    scene: '',
+    elapsed: 0,
+    total: 90,
+    homeInvite: false,
+    countdown: 0,
+    countdownTimer: null,
+  },
+
+  _initDateSystem() {
+    this._dateState.total = this.DATE_TOTAL;
+    this._showDateButton(false);
+    // Date config popup
+    const btnDate = document.getElementById('btnDialogueDate');
+    if (btnDate) {
+      btnDate.addEventListener('click', () => this._showDateConfig());
+    }
+    // Date config overlay click-outside
+    const dateOverlay = document.getElementById('dateConfigOverlay');
+    if (dateOverlay) {
+      dateOverlay.addEventListener('click', (e) => {
+        if (e.target === dateOverlay) this._hideDateConfig();
+      });
+    }
+    // Date config cancel
+    const cancelBtn = document.getElementById('btnDateConfigCancel');
+    if (cancelBtn) {
+      cancelBtn.addEventListener('click', () => this._hideDateConfig());
+    }
+    // Date config option clicks
+    document.querySelectorAll('.date-option').forEach(opt => {
+      opt.addEventListener('click', () => {
+        const activity = opt.dataset.activity;
+        const scene = opt.dataset.scene;
+        this._sendDateInvite(activity, scene);
+        this._hideDateConfig();
+      });
+    });
+    // Leave date button
+    const leaveBtn = document.getElementById('btnDateLeave');
+    if (leaveBtn) {
+      leaveBtn.addEventListener('click', () => this._handleDateLeave());
+    }
+    // Leave confirm
+    const confirmBtn = document.getElementById('btnDateLeaveConfirm');
+    if (confirmBtn) {
+      confirmBtn.addEventListener('click', () => this._confirmLeaveDate());
+    }
+    const leaveCancelBtn = document.getElementById('btnDateLeaveCancel');
+    if (leaveCancelBtn) {
+      leaveCancelBtn.addEventListener('click', () => {
+        document.getElementById('dateLeaveOverlay').style.display = 'none';
+      });
+    }
+    // Home invite
+    const acceptBtn = document.getElementById('btnHomeAccept');
+    if (acceptBtn) {
+      acceptBtn.addEventListener('click', () => this._acceptHomeInvite());
+    }
+    const rejectBtn = document.getElementById('btnHomeReject');
+    if (rejectBtn) {
+      rejectBtn.addEventListener('click', () => this._rejectHomeInvite());
+    }
+  },
+
+  _sceneNames: {
+    'scene_coffee_shop':'阳光咖啡店','scene_park':'中心公园','scene_school':'小镇高中',
+    'scene_library':'公共图书馆','scene_market':'便民超市','scene_hospital':'小镇医院',
+    'scene_restaurant':'小镇餐厅','scene_bar':'夜色酒吧','scene_gym':'健身中心',
+    'scene_cinema':'小镇影院','scene_clothing':'服装店','scene_station':'小镇车站',
+    'scene_riverside':'河边步道','scene_office':'镇政府','scene_arcade':'游戏厅',
+    'apt_a':'阳光公寓A','apt_b':'阳光公寓B','apt_c':'阳光公寓C','apt_d':'阳光公寓D',
+    'home_player':'我的公寓',
+  },
+
+  _updateDialogueScene(npc) {
+    const el = document.getElementById('dialogueScene');
+    if (!el || !npc) return;
+    // ── Date lock: during a date, only update scene for the date NPC ──
+    if (this._dateState && this._dateState.inDate) {
+      if (npc.npc_id !== this._dateState.npcId) return;
+    }
+    if (npc.in_date && npc.date_data && npc.date_data.scene_id) {
+      var dsId = npc.date_data.scene_id;
+      var dsName = (GALDialogue._sceneNames || {})[dsId] || dsId;
+      let act = npc.date_data.activity || '约会';
+      if (npc.is_traveling) {
+        el.textContent = '📍 前往约会地点 → ' + dsName + ' · ' + act;
+      } else {
+        el.textContent = '📍 ' + dsName + ' — 💕 ' + act;
+      }
+      return;
+    }
+    if (npc.is_traveling && npc.travel_target) {
+      var tn = (GALDialogue._sceneNames || {})[npc.travel_target] || npc.travel_target;
+      el.textContent = '📍 前往 ' + tn + '…';
+      return;
+    }
+    const sceneId = npc.current_scene_id || npc.scene_id || '';
+    const sceneName = npc.current_scene_name || (GALDialogue._sceneNames || {})[sceneId] || '';
+    const room = npc.current_room || '';
+    const act = npc.current_activity || '';
+    var loc = '📍 ';
+    if (sceneName) loc += sceneName;
+    else if (sceneId) loc += sceneId;
+    else loc += '未知';
+    if (room) loc += ' · ' + room;
+    if (act && act.length < 15) loc += ' — ' + act;
+    el.textContent = loc;
+  },
+
+  _showDateButton(show) {
+    const btn = document.getElementById('btnDialogueDate');
+    if (btn) {
+      // Only show if not already in a date with another NPC
+      if (show && !this._dateState.inDate) {
+        btn.style.display = '';
+      } else if (show && this._dateState.inDate && this._dateState.npcId === Store.get('selectedNpcId')) {
+        btn.style.display = '';  // show for current date NPC
+      } else if (this._dateState.inDate) {
+        btn.style.display = 'none';  // don't show if dating another NPC
+      } else {
+        btn.style.display = 'none';
+      }
+    }
+  },
+
+  _showDateConfig() {
+    // Don't allow new invite while in date
+    if (this._dateState.inDate) {
+      alert('你已经在约会中了，请先结束当前约会。');
+      return;
+    }
+    document.getElementById('dateConfigOverlay').style.display = 'flex';
+  },
+
+  _hideDateConfig() {
+    document.getElementById('dateConfigOverlay').style.display = 'none';
+  },
+
+  _sendDateInvite(activity, scene) {
+    const npcId = Store.get('selectedNpcId');
+    if (!npcId) return;
+
+    Store.addDialogue({
+      speakerId: Store.get('playerId'),
+      speakerName: '你',
+      speakerType: 'player',
+      content: '邀请' + activity + '约会...',
+      _seq: ++this._msgSeq,
+    });
+
+    WSClient.send({
+      type: 'date_invite',
+      data: { npc_id: npcId, activity: activity, scene_id: scene },
+    });
+
+    Store.set('isNpcTyping', true);
+    this._resetIdle();
+  },
+
+  _onDateAccepted(data) {
+    console.log('[Dialogue] _onDateAccepted called:', data);
+    const npcId = data.npc_id;
+    const npcName = data.npc_name;
+
+    this._dateState.inDate = true;
+    this._dateState.npcId = npcId;
+    this._dateState.npcName = npcName;
+    this._dateState.phase = 'location';
+    this._dateState.activity = data.activity || '';
+    this._dateState.scene = data.scene_id || '';
+    this._dateState.elapsed = 0;
+    this._dateState.total = this.DATE_TOTAL;
+
+    this._showDateBar();
+    this._showDateButton(true);
+    // Scene display updates via npc_state_update (NPC state publish)
+    // Don't change scene here - let npc_state_update arrive naturally
+  },
+
+  _onDateRejected(data) {
+    // NPC rejected the date invite — rejection message comes via dialogue_response
+    // Just update button state
+  },
+
+  _showDateBar(activity, elapsed, total) {
+    console.log('[Dialogue] _showDateBar called');
+    if (activity !== undefined) this._dateState.activity = activity;
+    if (elapsed !== undefined) this._dateState.elapsed = elapsed;
+    if (total !== undefined) this._dateState.total = total;
+
+    const bar = document.getElementById('dialogueDateBar');
+    if (!bar) return;
+
+    const textEl = document.getElementById('dateBarText');
+    const timeEl = document.getElementById('dateBarTime');
+
+    const phaseLabel = this._dateState.phase === 'home' ? '下半场 · NPC家中' : '上半场';
+    if (textEl) textEl.textContent = phaseLabel + ' — ' + (this._dateState.activity || '约会中');
+    if (timeEl) {
+      if (this._dateState.phase === 'home') {
+        timeEl.textContent = '自由互动';
+      } else {
+        timeEl.textContent = '已进行 ' + this._dateState.elapsed + ' / ' + this._dateState.total + ' 分钟';
+      }
+    }
+
+    bar.style.display = 'flex';
+    // Sync GAL date bar
+    if (typeof GALDialogue !== 'undefined' && GALDialogue._syncDateBar) {
+      GALDialogue._syncDateBar();
+    }
+  },
+
+  _hideDateBar() {
+    const bar = document.getElementById('dialogueDateBar');
+    if (bar) bar.style.display = 'none';
+    // Sync GAL date bar
+    if (typeof GALDialogue !== 'undefined' && GALDialogue._syncDateBar) {
+      GALDialogue._syncDateBar();
+    }
+  },
+
+  _handleDateLeave() {
+    document.getElementById('dateLeaveOverlay').style.display = 'flex';
+  },
+
+  _confirmLeaveDate() {
+    document.getElementById('dateLeaveOverlay').style.display = 'none';
+    const npcId = this._dateState.npcId || Store.get('selectedNpcId');
+    if (!npcId) return;
+
+    WSClient.send({
+      type: 'date_leave',
+      data: { npc_id: npcId },
+    });
+
+    this._clearDateState();
+  },
+
+  _showHomeInvite(data) {
+    // Only show to the active player
+    const playerId = Store.get('playerId');
+    if (data.player_id && data.player_id !== playerId) return;
+
+    const npcName = data.npc_name || 'NPC';
+    const message = data.message || (npcName + '邀请你去TA家坐坐');
+
+    this._dateState.homeInvite = true;
+    this._dateState.npcId = data.npc_id || this._dateState.npcId;
+    this._dateState.npcName = npcName;
+
+    document.getElementById('homeInviteMsg').textContent = message;
+    this._updateHomeCountdown();
+    document.getElementById('homeInviteOverlay').style.display = 'flex';
+
+    // Listen for NPC state updates to refresh countdown
+    if (this._homeInviteUnsub) this._homeInviteUnsub();
+    this._homeInviteUnsub = Store.on('npcs', () => {
+      if (this._dateState.homeInvite) this._updateHomeCountdown();
+    });
+  },
+
+  _updateHomeCountdown() {
+    const el = document.getElementById('homeInviteCountdown');
+    if (!el) return;
+    // Read remaining seconds from NPC state (backend controls timeout)
+    const npcId = this._dateState.npcId;
+    const npcs = Store.get('npcs') || {};
+    const npc = npcs[npcId] || {};
+    const remaining = npc.home_invite_remaining || 0;
+    if (remaining <= 0) {
+      el.textContent = '即将过期...';
+    } else {
+      const mins = Math.floor(remaining / 60);
+      const secs = remaining % 60;
+      el.textContent = '剩余 ' + mins + ':' + (secs < 10 ? '0' : '') + secs;
+    }
+  },
+
+  _hideHomeInvite() {
+    if (this._homeInviteUnsub) { this._homeInviteUnsub(); this._homeInviteUnsub = null; }
+    document.getElementById('homeInviteOverlay').style.display = 'none';
+    this._dateState.homeInvite = false;
+  },
+
+  _acceptHomeInvite() {
+    this._hideHomeInvite();
+    const npcId = this._dateState.npcId;
+    if (!npcId) return;
+
+    this._dateState.phase = 'home';
+    this._dateState.elapsed = 0;
+    this._showDateBar();
+
+    WSClient.send({
+      type: 'date_home_response',
+      data: { npc_id: npcId, accept: true },
+    });
+
+    Store.set('isNpcTyping', true);
+  },
+
+  _rejectHomeInvite() {
+    this._hideHomeInvite();
+    const npcId = this._dateState.npcId;
+    if (!npcId) return;
+
+    WSClient.send({
+      type: 'date_home_response',
+      data: { npc_id: npcId, accept: false },
+    });
+
+    this._clearDateState();
+  },
+
+  _clearDateState() {
+    this._dateState.inDate = false;
+    this._dateState.npcId = '';
+    this._dateState.npcName = '';
+    this._dateState.phase = '';
+    this._dateState.activity = '';
+    this._dateState.scene = '';
+    this._dateState.elapsed = 0;
+    this._dateState.total = this.DATE_TOTAL;
+    this._hideDateBar();
+    this._hideHomeInvite();
+    this._showDateButton(false);
+    // Sync GAL date bar
+    if (typeof GALDialogue !== 'undefined' && GALDialogue._syncDateBar) {
+      GALDialogue._syncDateBar();
+    }
   },
 };

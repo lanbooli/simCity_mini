@@ -28,6 +28,23 @@ const GALDialogue = {
     this._initSpeechInput();
     this._initCallMode();
 
+    // Date button
+    const galDateBtn = document.getElementById('galBtnDate');
+    if (galDateBtn) {
+      galDateBtn.addEventListener('click', () => {
+        if (Dialogue._dateState && Dialogue._dateState.inDate) {
+          alert('你已经在约会中了');
+          return;
+        }
+        Dialogue._showDateConfig();
+      });
+    }
+    // Date leave button in GAL bar
+    const galDateLeave = document.getElementById('galDateLeave');
+    if (galDateLeave) {
+      galDateLeave.addEventListener('click', () => Dialogue._handleDateLeave());
+    }
+
     // Expanded action tabs
     document.getElementById('galActionsTabs').querySelectorAll('.gal-act-tab').forEach(tab => {
       tab.addEventListener('click', () => {
@@ -50,7 +67,9 @@ const GALDialogue = {
       const npc = Store.get('selectedNpcDetail');
       if (npcId && npc) {
         this._renderPortrait(npc);
-        this._renderTextbox(Store.get('dialogueMessages') || []);
+        var dmsgs = Store.get('dialogueMessages') || [];
+        this._renderTextbox(dmsgs);
+        this._updateSceneDisplay(npc);
       }
     });
     // Also update when player data changes
@@ -97,6 +116,7 @@ const GALDialogue = {
 
       // Render
       this._renderPortrait(npc);
+      this._updateSceneDisplay(npc);
       this._updateRelDisplay(rel);
       this._setMode('simple');
       this._renderSimpleActions();
@@ -138,6 +158,7 @@ const GALDialogue = {
       var existingSeqs = new Set(this._allMsgs.map(m => m._seq));
       for (var si = 0; si < storeMsgs.length; si++) {
         var sm = storeMsgs[si];
+        if (sm._isAmbient) continue;
         if (!existingSeqs.has(sm._seq)) {
           this._allMsgs.push({ ...sm });
           existingSeqs.add(sm._seq);
@@ -299,7 +320,7 @@ const GALDialogue = {
       return;
     }
 
-    const sorted = [...msgs].sort((a, b) => (a._seq || a._ts || 0) - (b._seq || b._ts || 0));
+    const sorted = [...msgs].filter(m => !m._isAmbient).sort((a, b) => (a._seq || a._ts || 0) - (b._seq || b._ts || 0));
 
     // Last message is current; previous 1-2 are history
     const current = sorted[sorted.length - 1];
@@ -517,6 +538,7 @@ const GALDialogue = {
     const newMsgs = msgs.slice(processed);
     this._storeMsgsProcessed = msgs.length;
     for (const m of newMsgs) {
+      if (m._isAmbient) continue;
       this._allMsgs.push({ ...m });
     }
     this._renderTextbox(this._allMsgs);
@@ -1045,4 +1067,78 @@ const GALDialogue = {
   },
 
 
+
+  // ── Scene display ────────────────────────────
+  _sceneNames: {
+    'scene_coffee_shop': '阳光咖啡店', 'scene_park': '中心公园', 'scene_school': '小镇高中',
+    'scene_library': '公共图书馆', 'scene_market': '便民超市', 'scene_hospital': '小镇医院',
+    'scene_restaurant': '小镇餐厅', 'scene_bar': '夜色酒吧', 'scene_gym': '健身中心',
+    'scene_cinema': '小镇影院', 'scene_clothing': '服装店', 'scene_station': '小镇车站',
+    'scene_riverside': '河边步道', 'scene_office': '镇政府', 'scene_arcade': '游戏厅',
+    'apt_a': '阳光公寓A', 'apt_b': '阳光公寓B', 'apt_c': '阳光公寓C', 'apt_d': '阳光公寓D',
+    'home_player': '我的公寓',
+  },
+
+  _updateSceneDisplay(npc) {
+    const el = document.getElementById('galScene');
+    if (!el || !npc) return;
+    // ── Date lock: during a date, only update scene for the date NPC ──
+    if (Dialogue._dateState && Dialogue._dateState.inDate) {
+      if (npc.npc_id !== Dialogue._dateState.npcId) return;
+    }
+    // If NPC is in a date, show the date scene
+    if (npc.in_date && npc.date_data && npc.date_data.scene_id) {
+      var dateSceneId = npc.date_data.scene_id;
+      var dateSceneName = this._sceneNames[dateSceneId] || dateSceneId;
+      var activity = npc.date_data.activity || '约会';
+      if (npc.is_traveling) {
+        el.textContent = '📍 前往约会地点 → ' + dateSceneName + ' · ' + activity;
+      } else {
+        el.textContent = '📍 ' + dateSceneName + ' — 💕 ' + activity;
+      }
+      return;
+    }
+    // If traveling, show destination
+    if (npc.is_traveling && npc.travel_target) {
+      var tgtName = this._sceneNames[npc.travel_target] || npc.travel_target;
+      el.textContent = '📍 前往 ' + tgtName + '…';
+      return;
+    }
+    const sceneId = npc.current_scene_id || npc.scene_id || '';
+    const sceneName = npc.current_scene_name || this._sceneNames[sceneId] || '';
+    const room = npc.current_room || '';
+    const act = npc.current_activity || '';
+    var loc = '📍 ';
+    if (sceneName) loc += sceneName;
+    else if (sceneId) loc += sceneId;
+    else loc += '未知';
+    if (room) loc += ' · ' + room;
+    if (act && act.length < 15) loc += ' — ' + act;
+    el.textContent = loc;
+  },
+
+  // ── Date bar sync ────────────────────────────
+  _syncDateBar() {
+    console.log('[GAL] _syncDateBar called');
+    if (!Dialogue._dateState) return;
+    const bar = document.getElementById('galDateBar');
+    console.log('[GAL] galDateBar found:', !!bar);
+    if (!bar) return;
+    if (Dialogue._dateState.inDate) {
+      bar.style.display = 'flex';
+      const textEl = document.getElementById('galDateText');
+      const timeEl = document.getElementById('galDateTime');
+      const phaseLabel = Dialogue._dateState.phase === 'home' ? '下半场 · NPC家中' : '上半场';
+      if (textEl) textEl.textContent = phaseLabel + ' — ' + (Dialogue._dateState.activity || '约会中');
+      if (timeEl) {
+        if (Dialogue._dateState.phase === 'home') {
+          timeEl.textContent = '自由互动';
+        } else {
+          timeEl.textContent = '已进行 ' + (Dialogue._dateState.elapsed || 0) + ' / ' + (Dialogue._dateState.total || 90) + ' 分钟';
+        }
+      }
+    } else {
+      bar.style.display = 'none';
+    }
+  },
 };

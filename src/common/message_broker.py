@@ -103,9 +103,11 @@ class RedisBroker(MessageBroker):
 
         if self._pubsub is None:
             self._pubsub = self._redis.pubsub()
-            self._listener_task = asyncio.create_task(self._listen_loop())
 
         await self._pubsub.subscribe(channel)
+
+        if self._listener_task is None:
+            self._listener_task = asyncio.create_task(self._listen_loop())
 
     async def _listen_loop(self) -> None:
         """Background task that reads pubsub messages and dispatches to handlers."""
@@ -130,6 +132,9 @@ class RedisBroker(MessageBroker):
                             traceback.print_exc()
             except asyncio.CancelledError:
                 break
+            except RuntimeError:
+                # Pubsub connection race during startup — retry silently
+                await asyncio.sleep(0.5)
             except Exception:
                 traceback.print_exc()
                 await asyncio.sleep(1)

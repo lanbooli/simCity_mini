@@ -73,15 +73,94 @@ const WSClient = {
         break;
       case 'npc_state_update':
         Store.setNpcState(data.npc_id || data.name, data);
+        /* Sync date bar if NPC is in date */
+        if (data.in_date && typeof Dialogue !== 'undefined' && Dialogue._dateState) {
+          var selNpcId = Store.get('selectedNpcId');
+          if (data.npc_id === selNpcId) {
+            var dd = data.date_data || {};
+            Dialogue._dateState.inDate = true;
+            Dialogue._dateState.phase = data.date_phase || 'location';
+            Dialogue._dateState.elapsed = dd.elapsed || 0;
+            Dialogue._dateState.total = dd.total || 90;
+            Dialogue._dateState.activity = dd.activity || '';
+            Dialogue._showDateBar();
+            Dialogue._showDateButton(true);
+          }
+        }
+        /* Update scene display for selected NPC */
+        if (typeof Dialogue !== 'undefined' && Dialogue._updateDialogueScene) {
+          var selNpcId2 = Store.get('selectedNpcId');
+          if (data.npc_id === selNpcId2) {
+            Dialogue._updateDialogueScene(data);
+          }
+        }
+        if (typeof GALDialogue !== 'undefined' && GALDialogue._updateSceneDisplay) {
+          var selNpcId3 = Store.get('selectedNpcId');
+          if (data.npc_id === selNpcId3) {
+            GALDialogue._updateSceneDisplay(data);
+          }
+        }
+        break;
+      case 'date_invite':
+        /* ── Date event from server ── */
+        if (data.phase === 'home_invite') {
+          /* NPC invites player home */
+          if (typeof Dialogue !== 'undefined' && Dialogue._showHomeInvite) {
+            Dialogue._showHomeInvite(data);
+          }
+        } else if (data.phase === 'invite') {
+          /* Date invite accepted/rejected */
+          if (typeof Dialogue !== 'undefined') {
+            if (data.accepted) {
+              Dialogue._onDateAccepted(data);
+            } else {
+              Dialogue._onDateRejected(data);
+            }
+          }
+        } else if (data.phase === 'home_invite_expired') {
+          /* Backend says home invite timed out */
+          if (typeof Dialogue !== 'undefined') {
+            Dialogue._hideHomeInvite();
+            Dialogue._clearDateState();
+          }
+        }
         break;
       case 'dialogue_response':
-        // Auto-select NPC for initiated-by-NPC messages; always show text
-        if (data.npc_id !== Store.get('selectedNpcId')) {
-          if (data.initiated_by_npc && typeof App !== 'undefined' && App.selectNpc) {
-            App.selectNpc(data.npc_id);
+        // ── Don't let NPC-initiated greetings hijack active player dialogue ──
+        var isMyDialogueNpc = (data.npc_id === Store.get('selectedNpcId'));
+        // ── Date lock: during a date, only accept messages from the date NPC ──
+        if (typeof Dialogue !== 'undefined' && Dialogue._dateState && Dialogue._dateState.inDate) {
+          if (data.npc_id !== Dialogue._dateState.npcId && !isMyDialogueNpc) {
+            // Message from non-date NPC → mark as ambient
+            var ambSeq = ++Dialogue._msgSeq;
+            Store.addDialogue({
+              speakerId: data.npc_id, speakerName: data.npc_name, speakerType: 'npc',
+              content: data.content, favorabilityChange: data.favorability_change,
+              gameTime: data.game_time, _seq: ambSeq, _audioUrls: data.audio_url ? [data.audio_url] : [],
+              _isAmbient: true,
+            });
+            break;
           }
-          // Also show other NPC messages (e.g. social greetings) — don't drop them
         }
+
+        if (data.initiated_by_npc && !isMyDialogueNpc) {
+          // Greeting/social from a different NPC — silently append, don't switch NPC or stop typing
+          var otherSeq = ++Dialogue._msgSeq;
+          Store.addDialogue({
+            speakerId: data.npc_id,
+            speakerName: data.npc_name,
+            speakerType: 'npc',
+            content: data.content,
+            favorabilityChange: data.favorability_change,
+            gameTime: data.game_time,
+            _seq: otherSeq,
+            _audioUrls: data.audio_url ? [data.audio_url] : [],
+            _isAmbient: true,
+          });
+          break;
+        }
+
+        // ── Normal dialogue response (from the NPC we're talking to) ──
         // Reset audio queue for the new NPC response
         if (window.ttsAudioQueue) {
           window.ttsAudioQueue._stopCurrentPlayback();
@@ -104,7 +183,7 @@ const WSClient = {
           relationshipType: data.relationship_type,
           gameTime: data.game_time,
           _seq: msgSeq,
-          _audioUrls: pregenAudioUrl ? [pregenAudioUrl] : [],  // pre-generated greeting audio
+          _audioUrls: pregenAudioUrl ? [pregenAudioUrl] : [],
         });
         // Track per-NPC message seq for TTS chunk attachment (prevent cross-NPC mixing)
         if (!window._lastNpcMsgByNpc) window._lastNpcMsgByNpc = {};

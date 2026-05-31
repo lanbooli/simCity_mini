@@ -39,7 +39,7 @@ def list_all_npcs():
     try:
         rows = fetch_all(conn,
             "SELECT id, name, gender, personality, current_scene_id, "
-            "current_mood, current_activity, attributes, is_active, appearance "
+            "current_mood, current_activity, attributes, is_active, is_dead, death_cause, appearance "
             "FROM npc ORDER BY name")
         result = []
         for r in rows:
@@ -128,6 +128,100 @@ async def update_npc(npc_id: str, request: dict):
             conn.commit()
 
         return {"status": "ok", "data": {"npc_id": npc_id, "updated": list(updates.keys())}}
+    finally:
+        conn.close()
+
+
+@router.post("/npcs/{npc_id}/resurrect")
+async def resurrect_npc(npc_id: str, request: dict = None):
+    """Resurrect a dead NPC: set is_dead=0, is_active=1. Optionally reset age."""
+    _require_admin()
+    conn = get_connection()
+    try:
+        row = fetch_one(conn, "SELECT id, name, is_dead, birth_date FROM npc WHERE id = ?", (npc_id,))
+        if not row:
+            raise HTTPException(404, "NPC not found")
+        if not row["is_dead"]:
+            return {"status": "ok", "data": {"npc_id": npc_id, "message": f"{row['name']} 未死亡，无需复活"}}
+
+        new_age = None
+        if request and isinstance(request, dict):
+            new_age = request.get("age")
+            if new_age is not None:
+                new_age = clamp(int(new_age), 1, 120)
+
+        if new_age is not None:
+            birth_year = 2026 - new_age
+            new_birth = f"{birth_year:04d}-01-01"
+            execute(conn,
+                "UPDATE npc SET is_dead = 0, is_active = 1, death_cause = '', "
+                "birth_date = ?, updated_at = datetime('now') WHERE id = ?",
+                (new_birth, npc_id))
+            conn.commit()
+            logger.info(f"Admin resurrected NPC {row['name']} ({npc_id}) at age {new_age} (birth={new_birth})")
+            # Notify supervisor to start the NPC process
+            try:
+                import redis as _redis
+                _r = _redis.from_url(os.environ.get("REDIS_URL", "redis://localhost:6379"))
+                _cmd = json.dumps({"action": "start", "process": npc_id, "timestamp": datetime.now(timezone.utc).isoformat()})
+                _r.publish(ADMIN_CMD_CHANNEL, _cmd)
+                _r.close()
+                logger.info(f"Published start command for resurrected NPC {npc_id}")
+            except Exception as e:
+                logger.warning(f"Failed to publish start command for NPC {npc_id}: {e}")
+            return {"status": "ok", "data": {"npc_id": npc_id, "name": row["name"], "resurrected": True, "new_age": new_age}}
+        else:
+            execute(conn,
+                "UPDATE npc SET is_dead = 0, is_active = 1, death_cause = '', updated_at = datetime('now') WHERE id = ?",
+                (npc_id,))
+            conn.commit()
+            logger.info(f"Admin resurrected NPC {row['name']} ({npc_id})")
+            # Notify supervisor to start the NPC process
+            try:
+                import redis as _redis
+                _r = _redis.from_url(os.environ.get("REDIS_URL", "redis://localhost:6379"))
+                _cmd = json.dumps({"action": "start", "process": npc_id, "timestamp": datetime.now(timezone.utc).isoformat()})
+                _r.publish(ADMIN_CMD_CHANNEL, _cmd)
+                _r.close()
+                logger.info(f"Published start command for resurrected NPC {npc_id}")
+            except Exception as e:
+                logger.warning(f"Failed to publish start command for NPC {npc_id}: {e}")
+            return {"status": "ok", "data": {"npc_id": npc_id, "name": row["name"], "resurrected": True}}
+    finally:
+        conn.close()
+
+
+@router.get("/npcs/{npc_id}/memories")
+def get_npc_memories(npc_id: str, limit: int = 50):
+    """Get NPC memory list for admin viewing."""
+    _require_admin()
+    conn = get_connection()
+    try:
+        rows = fetch_all(conn,
+            "SELECT id, content, memory_type, importance, emotion, game_time, created_at "
+            "FROM memory WHERE entity_id = ? AND entity_type = 'npc' "
+            "ORDER BY created_at DESC LIMIT ?",
+            (npc_id, limit))
+        return {"status": "ok", "data": [dict(r) for r in rows]}
+    finally:
+        conn.close()
+
+
+@router.get("/npcs/{npc_id}/dialogues")
+def get_npc_dialogues(npc_id: str, limit: int = 50):
+    """Get NPC dialogue history for admin viewing."""
+    _require_admin()
+    conn = get_connection()
+    try:
+        rows = fetch_all(conn,
+            "SELECT d.id, d.speaker_id, d.speaker_type, d.listener_id, d.listener_type, "
+            "d.content, d.favorability_change, d.game_time, d.created_at "
+            "FROM dialogue d "
+            "WHERE (d.speaker_id = ? AND d.speaker_type = 'npc') "
+            "   OR (d.listener_id = ? AND d.listener_type = 'npc') "
+            "ORDER BY d.created_at DESC LIMIT ?",
+            (npc_id, npc_id, limit))
+        return {"status": "ok", "data": [dict(r) for r in rows]}
     finally:
         conn.close()
 

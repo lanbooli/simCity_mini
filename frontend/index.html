@@ -4,10 +4,10 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>城市小镇</title>
-<link rel="stylesheet" href="css/reset.css?v=14">
-<link rel="stylesheet" href="css/main.css?v=2">
-<link rel="stylesheet" href="css/components.css?v=14">
-<link rel="stylesheet" href="css/admin.css?v=2">
+<link rel="stylesheet" href="css/reset.css?v=15">
+<link rel="stylesheet" href="css/main.css?v=17">
+<link rel="stylesheet" href="css/components.css?v=15">
+<link rel="stylesheet" href="css/admin.css?v=3">
 </head>
 <body>
 
@@ -95,10 +95,22 @@
       </div>
     </div>
     <div class="dialogue-header-actions">
+      <button class="btn-header-icon" id="btnDialogueDate" title="邀请约会">💕</button>
       <span class="audio-playing-indicator" id="audioPlayingIndicator" title="NPC语音播放中">🔊 语音播放中...</span>
       <button class="btn-header-icon" id="btnDialogueMax" title="最大化聊天框">⤢</button>
     </div>
   </div>
+
+  <!-- Date status bar -->
+  <div class="dialogue-date-bar" id="dialogueDateBar" style="display:none;">
+    <div class="date-bar-content">
+      <span class="date-bar-icon">💕</span>
+      <span class="date-bar-text" id="dateBarText">正在约会中</span>
+      <span class="date-bar-time" id="dateBarTime">0 / 90 分钟</span>
+    </div>
+    <button class="btn-date-leave" id="btnDateLeave">离开约会</button>
+  </div>
+
   <div class="dialogue-messages" id="dialogueMessages">
     <div class="empty-hint">👋 点击场景中的NPC开始对话吧！</div>
   </div>
@@ -130,6 +142,62 @@
     ⏱ 空闲: <span id="idleCountdown">10:00</span>
   </div>
 </footer>
+
+
+<!-- Date config popup -->
+<div class="popup-overlay" id="dateConfigOverlay" style="display:none;">
+  <div class="popup-dialog date-config-dialog">
+    <div class="popup-title">💕 发起约会</div>
+    <div class="date-config-grid">
+      <div class="date-option" data-activity="吃饭" data-scene="scene_restaurant">
+        <span class="date-option-icon">🍽️</span>
+        <span class="date-option-label">吃饭</span>
+      </div>
+      <div class="date-option" data-activity="喝咖啡" data-scene="scene_coffee_shop">
+        <span class="date-option-icon">☕</span>
+        <span class="date-option-label">喝咖啡</span>
+      </div>
+      <div class="date-option" data-activity="散步" data-scene="scene_park">
+        <span class="date-option-icon">🚶</span>
+        <span class="date-option-label">散步</span>
+      </div>
+      <div class="date-option" data-activity="看电影" data-scene="scene_cinema">
+        <span class="date-option-icon">🎬</span>
+        <span class="date-option-label">看电影</span>
+      </div>
+      <div class="date-option" data-activity="喝酒" data-scene="scene_bar">
+        <span class="date-option-icon">🍺</span>
+        <span class="date-option-label">喝酒</span>
+      </div>
+    </div>
+    <button class="btn-popup-cancel" id="btnDateConfigCancel">取消</button>
+  </div>
+</div>
+
+<!-- Home invite popup -->
+<div class="popup-overlay" id="homeInviteOverlay" style="display:none;">
+  <div class="popup-dialog home-invite-dialog">
+    <div class="popup-title">🏠 邀请回家</div>
+    <div class="home-invite-message" id="homeInviteMsg"></div>
+    <div class="home-invite-countdown" id="homeInviteCountdown">剩余 5:00</div>
+    <div class="home-invite-buttons">
+      <button class="btn-primary" id="btnHomeAccept">接受</button>
+      <button class="btn-secondary" id="btnHomeReject">拒绝</button>
+    </div>
+  </div>
+</div>
+
+<!-- Leave date confirm popup -->
+<div class="popup-overlay" id="dateLeaveOverlay" style="display:none;">
+  <div class="popup-dialog date-leave-dialog">
+    <div class="popup-title">⚠️ 离开约会</div>
+    <div class="popup-body">你正在约会中，确定要离开吗？</div>
+    <div class="popup-buttons">
+      <button class="btn-primary" id="btnDateLeaveConfirm">确定离开</button>
+      <button class="btn-secondary" id="btnDateLeaveCancel">继续约会</button>
+    </div>
+  </div>
+</div>
 
 <!-- Social View (full-screen overlay) -->
 <div class="fullscreen-overlay" id="socialView" style="display:none;">
@@ -280,6 +348,7 @@
     <button class="gal-btn-back" id="galBtnBack" title="返回小镇">◀ 返回小镇</button>
     <div class="gal-topbar-center">
       <span class="gal-topbar-title" id="galTitle">💬 对话</span>
+      <span class="gal-topbar-location" id="galScene">📍 加载中...</span>
       <span class="gal-rel-tag" id="galRelTag">陌生人</span>
     </div>
     <div class="gal-topbar-right">
@@ -290,8 +359,18 @@
       </div>
       <button class="gal-btn-icon" id="galBtnDebug" title="关系调试">⚙️</button>
       <button class="gal-btn-icon" id="galBtnHistory" title="历史对话">📋</button>
+      <button class="gal-btn-icon" id="galBtnDate" title="邀请约会">💕</button>
       <button class="gal-btn-icon" id="galBtnVoice" title="语音切换">🔊</button>
     </div>
+  </div>
+
+
+  <!-- Date status bar (visible during date) -->
+  <div class="gal-date-bar" id="galDateBar" style="display:none;">
+    <span class="gal-date-icon">💕</span>
+    <span class="gal-date-text" id="galDateText">正在约会中</span>
+    <span class="gal-date-time" id="galDateTime">0 / 90 分钟</span>
+    <button class="gal-date-leave" id="galDateLeave">离开</button>
   </div>
 
   <!-- Debug panel (hidden by default) -->
@@ -401,22 +480,22 @@
   </div>
 </div>
 
-<script src="js/store.js?v=13"></script>
-<script src="js/websocket.js?v=28"></script>
-<script src="js/audioPlayer.js?v=20"></script>
-<script src="js/speechRecognition.js?v=1"></script>
-<script src="js/api.js?v=14"></script>
-<script src="js/components/relationshipBar.js?v=13"></script>
-<script src="js/renderer/actionRenderer.js?v=2"></script>
-<script src="js/components/npcCard.js?v=14"></script>
-<script src="js/panels/topBar.js?v=13"></script>
-<script src="js/panels/sidebar.js?v=14"></script>
-<script src="js/panels/sceneView.js?v=21"></script>
-<script src="js/panels/dialogue.js?v=22"></script>
-<script src="js/panels/socialCircle.js?v=21"></script>
-<script src="js/panels/adminPanel.js?v=16"></script>
-<script src="js/panels/playerSettings.js?v=2"></script>
-<script src="js/panels/galDialogue.js?v=2"></script>
-<script src="js/main.js?v=2"></script>
+<script src="js/store.js?v=14"></script>
+<script src="js/websocket.js?v=31"></script>
+<script src="js/audioPlayer.js?v=21"></script>
+<script src="js/speechRecognition.js?v=2"></script>
+<script src="js/api.js?v=15"></script>
+<script src="js/components/relationshipBar.js?v=14"></script>
+<script src="js/renderer/actionRenderer.js?v=3"></script>
+<script src="js/components/npcCard.js?v=15"></script>
+<script src="js/panels/topBar.js?v=14"></script>
+<script src="js/panels/sidebar.js?v=15"></script>
+<script src="js/panels/sceneView.js?v=22"></script>
+<script src="js/panels/dialogue.js?v=28"></script>
+<script src="js/panels/socialCircle.js?v=22"></script>
+<script src="js/panels/adminPanel.js?v=17"></script>
+<script src="js/panels/playerSettings.js?v=3"></script>
+<script src="js/panels/galDialogue.js?v=8"></script>
+<script src="js/main.js?v=3"></script>
 </body>
 </html>

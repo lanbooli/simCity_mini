@@ -26,6 +26,7 @@ from src.llm.prompts import (
     NPC_PERFORMANCE,
 )
 from src.common.utils import now_iso, clamp
+from config.settings import settings
 from src.npc.action_rules import (
     ACTION_RULES, PHYSICAL_ACTIONS, ACTION_CATEGORY_DESC,
     apply_action_rules, check_physical_action, parse_attributes,
@@ -100,28 +101,6 @@ CAREER_GREETINGS: dict[str, list[str]] = {
     ],
 }
 
-
-def _clean_response(text: str) -> str:
-    """Strip model thinking artifacts and hallucinated player continuations."""
-    import re
-    # Remove Gemma thinking channel markers (multiple formats)
-    text = re.sub(r'<\$channel\$>thought\s*', '', text)
-    text = re.sub(r'<\$channel\$>', '', text)
-    text = re.sub(r'<\|channel>thought\s*', '', text)
-    text = re.sub(r'<channel\|>', '', text)
-    text = re.sub(r'^\s*use_thought\s*', '', text)
-    # Remove bare thought tags
-    text = re.sub(r'</?thought>', '', text)
-    # Remove any remaining <$...> or <|channel... tags
-    text = re.sub(r'<\$[^>]*>', '', text)
-    text = re.sub(r'<\|?channel[^>]*>', '', text)
-    # Strip hallucinated player continuations (model may generate "Player: ..." without stop tokens)
-    for pattern in [r'\n\s*测试玩家[：:].*$', r'\n\s*Player[：:].*$', r'\n\s*玩家[：:].*$',
-                    r'\n\s*\{[^}]*测试玩家\}.*$', r'\n\s*\{[^}]*玩家\}.*$']:
-        text = re.sub(pattern, '', text, flags=re.IGNORECASE)
-    # Trim whitespace per line
-    lines = [l.strip() for l in text.split('\n') if l.strip()]
-    return '\n'.join(lines).strip()
 
 
 def _load_personality_description(npc_id: str) -> str:
@@ -239,6 +218,9 @@ class InteractionContext:
 class DialogueHandler:
     def __init__(self, npc_data: dict, memory_mgr, relationship_mgr, mood_mgr):
         self.npc = npc_data
+        self._is_pet = False  # set by process.py for pet client requests
+        self._in_date = False       # True during date (both phases)
+        self._date_context = ""     # injected into LLM prompts
         self.memory_mgr = memory_mgr
         self.relationship_mgr = relationship_mgr
         self.mood_mgr = mood_mgr
@@ -316,15 +298,16 @@ class DialogueHandler:
         try:
             logger.info(f"NPC {self.npc['name']} calling LLM for {player_name}...")
             max_tok, temp = get_llm_params("player_dialogue")
+            call_type = "pet_dialogue" if self._is_pet else "player_dialogue"
             raw_response = await gateway.submit(
-                priority=PRIORITY_MAP["player_dialogue"],
-                call_type="player_dialogue",
+                priority=PRIORITY_MAP[call_type],
+                call_type=call_type,
                 messages=messages,
                 temperature=temp,
                 max_tokens=max_tok,
                 timeout=300,  # thinking model takes 60-180s
             )
-            response = _clean_response(raw_response)
+            response = raw_response
             logger.info(f"NPC {self.npc['name']} LLM response: {response[:80]}...")
         except Exception as e:
             logger.warning(f"NPC {self.npc['name']} LLM call failed: {type(e).__name__}: {e}")
@@ -474,6 +457,16 @@ class DialogueHandler:
             lines.append(f"{speaker_name}: {d['content'][:80]}")
         return "\n".join(lines)
 
+    def set_date_context(self, context: str):
+        """Set date context for LLM prompt injection."""
+        self._in_date = True
+        self._date_context = context
+
+    def clear_date_context(self):
+        """Clear date context after date ends."""
+        self._in_date = False
+        self._date_context = ""
+
     def _get_goals_text(self) -> list:
         from src.common.database import get_connection, fetch_all
         conn = get_connection()
@@ -555,10 +548,8 @@ class DialogueHandler:
             parts = content[1:].split(None, 1)
             action_name = parts[0].strip()
             extra = parts[1].strip() if len(parts) > 1 else ""
-            if action_name in ACTION_RULES or action_name in PHYSICAL_ACTIONS:
-                return action_name, extra
-            # Unknown action, return as is
-            return "", content
+            # Treat any /command as an action — LLM handles custom actions
+            return action_name, extra
         return "", content
 
     async def respond_to_action(
@@ -580,7 +571,9 @@ class DialogueHandler:
         physical_action = PHYSICAL_ACTIONS.get(action_name) if not action else None
 
         if not action and not physical_action:
-            return self._fallback_action_response(action_name)
+            # Custom action — generate via LLM with action prompt
+            return await self._generate_custom_action_response(
+                player_name, player_id, action_name, scene_name, game_time)
 
         # Get relationship
         mood_before = self.mood_mgr.current
@@ -658,16 +651,17 @@ class DialogueHandler:
         try:
             logger.info(f"NPC {self.npc['name']} reacting to action '{action_name}' "
                         f"(physical={is_physical}, success={action_success}) from {player_name}...")
-            max_tok, temp = get_llm_params("player_action")
+            call_type = "pet_action" if self._is_pet else "player_action"
+            max_tok, temp = get_llm_params(call_type)
             raw_response = await gateway.submit(
-                priority=PRIORITY_MAP["player_action"],
-                call_type="player_action",
+                priority=PRIORITY_MAP[call_type],
+                call_type=call_type,
                 messages=messages,
                 temperature=temp,
                 max_tokens=max_tok,
                 timeout=300,
             )
-            response = _clean_response(raw_response)
+            response = raw_response
             logger.info(f"NPC {self.npc['name']} action response: {response[:80]}...")
         except Exception as e:
             logger.warning(f"NPC {self.npc['name']} action LLM call failed: {type(e).__name__}: {e}")
@@ -730,6 +724,44 @@ class DialogueHandler:
             f"（微微一愣，然后露出礼貌的微笑）你好？",
         ]
         return f"{random.choice(fallbacks)} [[FAVORABILITY: 0]]"
+
+    async def _generate_custom_action_response(
+        self, player_name: str, player_id: str, action_name: str,
+        scene_name: str = "", game_time: str = "",
+    ) -> dict:
+        """Generate NPC reaction to a custom /command action via LLM."""
+        mood_before = self.mood_mgr.current
+        rel = self.relationship_mgr.get_or_create_relation(player_id, "player")
+        fav_before = rel.get("favorability", 0)
+
+        system_msg = (
+            f"你是一个角色扮演AI，你在游戏世界里扮演一个角色。\n"
+            f"场景：{scene_name}，时间：{game_time}\n"
+            f"玩家对她做了动作：{action_name}\n\n"
+            f"规则：\n"
+            f"1. 用中文描述你的动作反应和对话，动作用（），对话用「」\n"
+            f"2. 根据动作类型和两人关系做出合理反应\n"
+            f"3. 以 [[FAVORABILITY: ±N]] 结尾，N是本次好感度变化（-5到+5之间）\n"
+            f"4. 回复尽量简短（30-60字）"
+        )
+        user_msg = f"玩家{player_name}对你做了：{action_name}"
+        result = await self._simple_llm_call(system_msg, user_msg, call_type="player_action")
+        result_text = result["content"]
+        fav_delta = result.get("favorability_change", 0)
+
+        self.relationship_mgr.update_interaction(player_id, fav_delta, other_type="player")
+        self.mood_mgr.affect(fav_delta)
+
+        return {
+            "content": result_text,
+            "favorability_change": fav_delta,
+            "favorability_before": fav_before,
+            "favorability_after": rel.get("favorability", 0),
+            "familiarity_after": rel.get("familiarity", 0),
+            "mood_before": mood_before,
+            "new_mood": self.mood_mgr.current,
+            "relationship_type": rel.get("relationship_type", "stranger"),
+        }
 
     # ── NPC→NPC Social ──────────────────────────────
 
@@ -1036,10 +1068,19 @@ class DialogueHandler:
     async def _simple_llm_call(self, system_msg: str, context: str,
                                max_tokens: int = 0, call_type: str = "") -> dict:
         """Make a simple LLM call via Gateway and parse favorability from response."""
+        # Pet client: remap to single-channel pet model
+        if self._is_pet and call_type in ("player_dialogue", "player_action"):
+            call_type = "pet_" + call_type.split("_", 1)[1] if "_" in call_type else "pet_dialogue"
+        # Inject date context into system message if in a date
+        if self._in_date and self._date_context:
+            system_msg = self._date_context + "\n\n" + system_msg
         gateway = get_gateway_client()
         try:
             default_tok, default_temp = get_llm_params(call_type) if call_type else (1024, 0.7)
             tok = max_tokens if max_tokens > 0 else default_tok
+            import os as _dial_os
+            _dial_timeout = float(_dial_os.environ.get("LLM_TIMEOUT_SECONDS", "300"))
+            llm_timeout = _dial_timeout if settings.llm_provider == 'lmstudio' else min(180, _dial_timeout)
             raw_response = await gateway.submit(
                 priority=PRIORITY_MAP.get(call_type, Priority.MEDIUM),
                 call_type=call_type,
@@ -1049,13 +1090,25 @@ class DialogueHandler:
                 ],
                 temperature=default_temp,
                 max_tokens=tok,
+                timeout=llm_timeout,
             )
-            response = _clean_response(raw_response)
+            response = raw_response
             fav_change = self._parse_favorability(response)
             return {"content": response.strip(), "favorability_change": fav_change}
         except Exception as e:
             logger.warning(f"LLM call failed ({context}): {type(e).__name__}: {e}")
-            return {"content": f"（{context}）[[FAVORABILITY: 0]]", "favorability_change": 0}
+            # Generate graceful fallback based on context
+            if "打招呼" in context:
+                fallback = "（微笑了一下）"
+            elif "内心" in context:
+                fallback = "（若有所思）"
+            elif "约会" in context or "邀请" in context:
+                fallback = "（开心地点了点头）"
+            elif "回复" in context or "评论" in context:
+                fallback = "（点了点头）"
+            else:
+                fallback = "（...）"
+            return {"content": fallback + "[[FAVORABILITY: 0]]", "favorability_change": 0}
 
     @staticmethod
     def _meets_rel_requirement(current_type: str, required: str) -> bool:

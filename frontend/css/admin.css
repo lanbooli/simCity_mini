@@ -275,3 +275,86 @@
 .admin-right::-webkit-scrollbar-track { background: transparent; }
 .admin-left::-webkit-scrollbar-thumb,
 .admin-right::-webkit-scrollbar-thumb { background: #444; border-radius: 3px; }
+
+/* Death badge */
+.admin-dead-badge {
+  display: inline-block;
+  background: #4a1a1a;
+  color: #ff5252;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  margin-left: 4px;
+}
+
+/* Avatar in detail header */
+.admin-card-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.admin-avatar {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid #ff9800;
+  flex-shrink: 0;
+}
+.admin-avatar-placeholder {
+  background: #1a1a2e;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+  color: #666;
+}
+
+/* Relationship editor */
+.admin-rel-editor {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid #333;
+}
+.admin-rel-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 3px 0;
+  font-size: 11px;
+}
+.admin-rel-row input {
+  background: #0a0a1a;
+  border: 1px solid #444;
+  border-radius: 4px;
+  color: #e0e0e0;
+  padding: 2px 6px;
+  font-size: 11px;
+}
+
+/* Memory / Dialogue lists */
+.admin-memory-list,
+.admin-dialogue-list {
+  max-height: 200px;
+  overflow-y: auto;
+  margin-top: 4px;
+}
+.admin-memory-item,
+.admin-dialogue-item {
+  padding: 6px 8px;
+  margin: 3px 0;
+  background: #0a0a1a;
+  border-radius: 4px;
+  font-size: 11px;
+  border-left: 3px solid #ff9800;
+}
+.admin-dialogue-item {
+  border-left-color: #4fc3f7;
+}
+.admin-memory-time,
+.admin-dialogue-time {
+  font-size: 10px;
+  color: #666;
+  margin-bottom: 2px;
+}

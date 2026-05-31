@@ -6,6 +6,33 @@ from datetime import datetime
 from typing import Optional
 
 
+
+# ── Game ↔ Real time conversion ──────────────────
+# Uses settings.game_speed_multiplier (default 15: 1 real sec = 15 game sec)
+
+import os as _os
+_game_mult: int | None = None
+
+def _get_mult() -> int:
+    """Get game speed multiplier. Reads GAME_SPEED env var, defaults to 15."""
+    global _game_mult
+    if _game_mult is None:
+        _game_mult = int(_os.environ.get("GAME_SPEED_MULTIPLIER", "15"))
+    return _game_mult
+
+def real_seconds_to_game_minutes(real_seconds: float) -> float:
+    """Convert real seconds to game minutes using speed multiplier."""
+    return real_seconds * _get_mult() / 60.0
+
+def game_minutes_to_real_seconds(game_minutes: float) -> float:
+    """Convert game minutes to real seconds using speed multiplier."""
+    return game_minutes * 60.0 / _get_mult()
+
+def real_minutes_to_game_hours(real_minutes: float) -> float:
+    """Convert real minutes to game hours."""
+    return real_minutes * _get_mult() / 60.0
+
+
 def setup_logging(name: str, level: str = "INFO") -> logging.Logger:
     logger = logging.getLogger(name)
     if not logger.handlers:

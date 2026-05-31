@@ -47,8 +47,10 @@ def get_dialogue_history(player_id: str, npc_id: str, limit: int = 50):
         rows = fetch_all(conn, """SELECT * FROM dialogue
                                 WHERE (speaker_id = ? AND listener_id = ?)
                                    OR (speaker_id = ? AND listener_id = ?)
-                                ORDER BY created_at ASC, rowid ASC LIMIT ?""",
+                                ORDER BY created_at DESC LIMIT ?""",
                        (player_id, npc_id, npc_id, player_id, limit))
-        return ApiResponse(data=[dict(r) for r in rows])
+        # Return in chronological order (oldest → newest)
+        result = [dict(r) for r in reversed(rows)]
+        return ApiResponse(data=result)
     finally:
         conn.close()

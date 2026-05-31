@@ -25,7 +25,7 @@ class GameSession: ObservableObject {
 
     func connect() {
         session = URLSession(configuration: .default)
-        guard let u = URL(string: "ws://localhost:8000/ws/game?player_id=player_001") else { return }
+        guard let u = URL(string: "ws://localhost:8000/ws/game?player_id=player_001&client_type=pet") else { return }
         task = session?.webSocketTask(with: u); task?.resume()
         receive(); loadNpcs()
     }
@@ -143,15 +143,20 @@ class GameSession: ObservableObject {
             DispatchQueue.main.async {
                 switch ty {
                 case "dialogue_response":
-                    if let c = dt["content"] as? String, !c.isEmpty {
-                        self?.npcBubble = c; self?.playerBubble = ""; self?.showBubbles = true
+                    // Only show bubble if from currently selected NPC (or player hasn't selected one yet)
+                    let msgNpcId = dt["npc_id"] as? String ?? ""
+                    let isMyNpc = msgNpcId.isEmpty || msgNpcId == self?.selectedNpcId
+                    if isMyNpc {
+                        if let c = dt["content"] as? String, !c.isEmpty {
+                            self?.npcBubble = c; self?.playerBubble = ""; self?.showBubbles = true
+                        }
+                        if let fc = dt["favorability_change"] as? String, let fv = Int(fc), fv != 0 {
+                            self?.favChange = fv > 0 ? "❤️+\(fv)" : "💔\(fv)"
+                            DispatchQueue.main.asyncAfter(deadline: .now()+3) { self?.favChange = "" }
+                        }
+                        if let m = dt["new_mood"] as? String { self?.npcMood = m }
+                        self?.fetchNpcInfo()
                     }
-                    if let fc = dt["favorability_change"] as? String, let fv = Int(fc), fv != 0 {
-                        self?.favChange = fv > 0 ? "❤️+\(fv)" : "💔\(fv)"
-                        DispatchQueue.main.asyncAfter(deadline: .now()+3) { self?.favChange = "" }
-                    }
-                    if let m = dt["new_mood"] as? String { self?.npcMood = m }
-                    self?.fetchNpcInfo()
                 case "tts_audio":
                     if let u = dt["audio_url"] as? String { self?.playAudio(u) }
                 case "greeting":
@@ -381,7 +386,3 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 }
 
-let app = NSApplication.shared
-let d = AppDelegate(); app.delegate = d
-app.setActivationPolicy(.accessory); app.run()
-_ = d

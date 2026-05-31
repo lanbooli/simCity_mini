@@ -74,7 +74,7 @@ class Live2DSession: ObservableObject {
 
     func connect() {
         session = URLSession(configuration: .default)
-        guard let u = URL(string: "ws://localhost:8000/ws/game?player_id=player_001") else { return }
+        guard let u = URL(string: "ws://localhost:8000/ws/game?player_id=player_001&client_type=pet") else { return }
         task = session?.webSocketTask(with: u); task?.resume()
         receive(); loadNpcs()
         

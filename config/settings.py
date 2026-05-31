@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     lmstudio_base_url: str = "http://192.168.50.223:1234"
     lmstudio_model: str = "qwen3.6-35b-a3b-uncensored-hauhaucs-aggressive"
     lmstudio_social_model: str = "qwen3.5-4b-uncensored-hauhaucs-aggressive"
+    lmstudio_pet_model: str = "qwen3.6-35b-a3b-uncensored-hauhaucs-aggressive"
 
     # Embedding (for vector memory/RAG)
     # Uses llm_provider's base URL by default; override with EMBEDDING_BASE_URL
@@ -45,11 +46,11 @@ class Settings(BaseSettings):
 
     # LLM Gateway
     llm_gateway_max_concurrent: int = 8
-    llm_gateway_circuit_threshold: int = 5
+    llm_gateway_circuit_threshold: int = 10
     llm_gateway_circuit_recovery: float = 30.0
     llm_gateway_retry_max: int = 3
     llm_gateway_retry_base_delay: float = 1.0
-    llm_gateway_request_timeout: float = 60.0  # DeepSeek <5s, but keep headroom
+    llm_gateway_request_timeout: float = 0.0  # 0 = use LLM_TIMEOUT_SECONDS env or 300  # DeepSeek <5s, but keep headroom
 
     # TTS Gateway
     tts_enabled: bool = True

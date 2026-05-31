@@ -601,6 +601,211 @@ body {
   display: none;
 }
 
+
+/* ── Date system ─────────────────────────────── */
+
+.dialogue-date-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 12px;
+  background: linear-gradient(135deg, #FFF0F5, #FFE4E1);
+  border-bottom: 1px solid #FFB6C1;
+  font-size: 12px;
+  gap: 8px;
+}
+
+.date-bar-content {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
+
+.date-bar-icon {
+  font-size: 16px;
+}
+
+.date-bar-text {
+  font-weight: 600;
+  color: #D6336C;
+  white-space: nowrap;
+}
+
+.date-bar-time {
+  color: #888;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.btn-date-leave {
+  padding: 3px 10px;
+  font-size: 11px;
+  background: #FFE0E0;
+  border: 1px solid #FFB6C1;
+  border-radius: 6px;
+  color: #D6336C;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s;
+}
+
+.btn-date-leave:hover {
+  background: #FFB6C1;
+  color: white;
+}
+
+/* ── Date config popup ── */
+
+.popup-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10100;
+  background: rgba(0,0,0,0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.popup-dialog {
+  background: var(--bg-card, white);
+  border-radius: 16px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+  padding: 20px;
+  min-width: 280px;
+  max-width: 90vw;
+}
+
+.popup-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-primary, #333);
+  margin-bottom: 14px;
+  text-align: center;
+}
+
+.popup-body {
+  font-size: 14px;
+  color: var(--text-secondary, #666);
+  margin-bottom: 16px;
+  text-align: center;
+}
+
+.popup-buttons {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+}
+
+.date-config-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.date-option {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 12px 8px;
+  background: #FFF5F7;
+  border: 2px solid #FFE0E8;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.date-option:hover {
+  background: #FFE0E8;
+  border-color: #FFB6C1;
+  transform: scale(1.03);
+}
+
+.date-option-icon {
+  font-size: 24px;
+}
+
+.date-option-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #D6336C;
+}
+
+.btn-popup-cancel {
+  width: 100%;
+  padding: 8px;
+  font-size: 13px;
+  background: #F0F0F0;
+  border: 1px solid #DDD;
+  border-radius: 8px;
+  cursor: pointer;
+  color: #666;
+  transition: all 0.15s;
+}
+
+.btn-popup-cancel:hover {
+  background: #E0E0E0;
+}
+
+/* ── Home invite ── */
+
+.home-invite-message {
+  font-size: 14px;
+  color: var(--text-secondary, #666);
+  margin-bottom: 8px;
+  text-align: center;
+  padding: 8px;
+  background: #FFF8F0;
+  border-radius: 8px;
+}
+
+.home-invite-countdown {
+  font-size: 13px;
+  font-weight: 600;
+  color: #E67700;
+  text-align: center;
+  margin-bottom: 14px;
+}
+
+.home-invite-buttons {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+}
+
+.btn-primary {
+  padding: 8px 20px;
+  font-size: 14px;
+  background: var(--accent-pink, #E64980);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btn-primary:hover {
+  opacity: 0.85;
+}
+
+.btn-secondary {
+  padding: 8px 20px;
+  font-size: 14px;
+  background: #F0F0F0;
+  border: 1px solid #DDD;
+  border-radius: 8px;
+  cursor: pointer;
+  color: #666;
+  transition: all 0.15s;
+}
+
+.btn-secondary:hover {
+  background: #E0E0E0;
+}
+
 /* ── Audio playback indicator ────────────────── */
 
 .audio-playing-indicator {
@@ -1453,6 +1658,12 @@ body {
   border: 1px solid rgba(255,171,64,0.25);
 }
 
+
+.gal-topbar-location {
+  font-size: 11px;
+  color: rgba(255,255,255,0.6);
+  margin-top: 2px;
+}
 .gal-topbar-right {
   display: flex;
   align-items: center;
@@ -2019,7 +2230,7 @@ body {
   position: fixed;
   top: 56px;
   right: 20px;
-  z-index: 9100;
+  z-index: 10100;
   font-size: 12px;
   color: #FFAB40;
   background: rgba(0,0,0,0.7);
@@ -2135,6 +2346,50 @@ body {
   color: #666;
   text-align: center;
   margin-top: 60px;
+
+/* ── GAL Date bar ──────────────────────────── */
+
+.gal-date-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 6px 16px;
+  background: linear-gradient(135deg, rgba(255,240,245,0.95), rgba(255,228,225,0.95));
+  border-bottom: 1px solid rgba(255,182,193,0.5);
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+.gal-date-icon {
+  font-size: 16px;
+}
+
+.gal-date-text {
+  font-weight: 600;
+  color: #D6336C;
+}
+
+.gal-date-time {
+  color: #999;
+  font-size: 12px;
+}
+
+.gal-date-leave {
+  padding: 2px 10px;
+  font-size: 11px;
+  background: rgba(255,200,200,0.5);
+  border: 1px solid #FFB6C1;
+  border-radius: 6px;
+  color: #D6336C;
+  cursor: pointer;
+}
+
+.gal-date-leave:hover {
+  background: #FFB6C1;
+  color: white;
+}
+
   font-size: 15px;
 }
 

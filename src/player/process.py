@@ -75,9 +75,14 @@ class PlayerProcess:
                     await self.broker.stream_ack(stream, "group_player", msg_id)
             except asyncio.CancelledError:
                 break
+            except RuntimeError:
+                break  # Event loop stopped during shutdown
             except Exception as e:
                 logger.error(f"Inbound consumer error: {e}")
-                await asyncio.sleep(1)
+                try:
+                    await asyncio.sleep(1)
+                except RuntimeError:
+                    break
 
     async def _outbound_consumer(self, stream: str):
         """Consume NPC responses and forward to API."""
@@ -92,9 +97,14 @@ class PlayerProcess:
                     await self.broker.stream_ack(stream, "group_player_out", msg_id)
             except asyncio.CancelledError:
                 break
+            except RuntimeError:
+                break  # Event loop stopped during shutdown
             except Exception as e:
                 logger.error(f"Outbound consumer error: {e}")
-                await asyncio.sleep(1)
+                try:
+                    await asyncio.sleep(1)
+                except RuntimeError:
+                    break
 
     async def _on_time(self, data: dict):
         pass  # Future: player-specific time-based events

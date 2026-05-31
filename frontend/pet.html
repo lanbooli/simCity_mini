@@ -47,7 +47,7 @@ body{font-family:-apple-system,PingFang SC,sans-serif;background:#1a1a2e;color:#
   <button id="sendBtn" disabled>发送</button>
 </div>
 <script>
-const WS_URL = `ws://${location.host}/ws/game?player_id=player_001`;
+const WS_URL = `ws://${location.host}/ws/game?player_id=player_001&client=pet`;
 const API_BASE = `http://${location.host}`;
 let ws, currentNpc, npcs = {};
 let bubbleTimer;
@@ -67,6 +67,8 @@ function connect() {
     const msg = JSON.parse(e.data);
     if (msg.type === 'dialogue_response') {
       const d = msg.data;
+      // Only show messages for the currently selected NPC
+      if (!currentNpc || d.npc_id !== currentNpc) return;
       if (d.content) showBubble((d.npc_name||'') + ': ' + d.content);
       if (d.new_mood) document.getElementById('mood').textContent = d.new_mood;
       if (d.favorability_change && d.favorability_change != 0) {
@@ -74,6 +76,8 @@ function connect() {
       }
     }
     if (msg.type === 'greeting' && msg.data.content) {
+      // Only show greeting for the currently selected NPC
+      if (currentNpc && msg.data.npc_id && msg.data.npc_id !== currentNpc) return;
       showBubble('👋 '+(msg.data.npc_name||'')+': '+msg.data.content);
     }
   };

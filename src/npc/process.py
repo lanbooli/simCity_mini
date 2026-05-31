@@ -18,7 +18,8 @@ from config.settings import settings
 from src.common.message_broker import RedisBroker
 from src.common.database import get_connection, execute, fetch_one, fetch_all
 from src.common.models import gen_id
-from src.common.utils import setup_logging, game_time_to_str
+import time as _stdtime
+from src.common.utils import setup_logging, game_time_to_str, game_minutes_to_real_seconds
 from src.npc.mood import MoodManager
 from src.npc.movement import MovementManager, generate_default_schedule
 from src.npc.memory import MemoryManager
@@ -78,6 +79,13 @@ class NpcProcess:
         self._tasks: list[asyncio.Task] = []
         # Travel system
         self._is_traveling: bool = False
+        # ── Date system state ──
+        self._in_date: bool = False
+        self._date_player_id: str = ""
+        self._date_phase: str = ""  # "location" | "home"
+        self._date_data: dict = {}
+        self._home_invite_sent: bool = False
+        self._home_invite_expires: float = 0.0  # real time.monotonic() expiry
         self._travel_remaining: float = 0.0  # game minutes until arrival
         self._travel_target: str = ""
         self._travel_room: str = ""
@@ -267,11 +275,28 @@ class NpcProcess:
             if self._idle_countdown <= 0:
                 logger.info(f"NPC {self.npc_data['name']}: dialogue idle timeout, resuming autonomy")
                 self.brain.set_in_dialogue(False)
+                # Allow other NPCs to greet player again
+                try:
+                    await self.broker.kv_delete(f"state:player:{self._in_dialogue_with}:in_dialogue_with")
+                except Exception:
+                    pass
                 self._in_dialogue_with = ""
 
         # Natural mood decay (every game hour)
         if data.get("minute") == 0:
             self.mood_mgr.update(hours_passed=1.0)
+
+        # Date recovery FIRST (before decay, to prevent death during dates)
+        if self._in_date and self.physiology and self._date_data:
+            rates = self._date_data.get("tick_rates", {})
+            if rates:
+                self.physiology.recover_tick(rates)
+            self._date_data["elapsed"] = self._date_data.get("elapsed", 0) + 1
+            # Check if date should end (time limit reached for location phase)
+            if self._date_phase == "location":
+                total = self._date_data.get("total", self.DATE_DURATION_MINUTES)
+                if self._date_data["elapsed"] >= total:
+                    asyncio.create_task(self._finish_date_phase())
 
         # Physiology tick (every game hour)
         if data.get("minute") == 0 and self.physiology:
@@ -285,8 +310,7 @@ class NpcProcess:
 
         # Aging & elder death check (midnight game time)
         if data.get("hour") == 0 and data.get("minute") == 0 and self.physiology:
-            import time as _time
-            _now = _time.monotonic()
+            _now = _stdtime.monotonic()
             if not hasattr(self, '_last_daily_check_real'):
                 self._last_daily_check_real = _now
             _elapsed_hours = (_now - self._last_daily_check_real) / 3600.0
@@ -309,8 +333,13 @@ class NpcProcess:
                 await self._publish_state()
                 return
 
+        # ── Home invite expiry (5 real min timeout) ──
+        if self._home_invite_sent:
+            if _stdtime.monotonic() >= self._home_invite_expires:
+                asyncio.create_task(self._expire_home_invite())
+
         # Run autonomous decision (every ~15 game minutes)
-        if data.get("minute", 0) % 15 == 0 and not self._in_dialogue_with and not self._is_traveling:
+        if data.get("minute", 0) % 15 == 0 and not self._in_dialogue_with and not self._is_traveling and not self._in_date:
             await self._autonomous_cycle(data)
 
     async def _on_weather_update(self, data: dict):
@@ -371,9 +400,18 @@ class NpcProcess:
         except Exception:
             pass
 
-        # Don't greet if in dialogue
+        # Don't greet if this NPC is in dialogue
         if self._in_dialogue_with:
             return
+
+        # Don't greet if player is in dialogue with another NPC
+        try:
+            other_npc = await self.broker.kv_get(f"state:player:{player_id}:in_dialogue_with")
+            if other_npc and other_npc != self.npc_id:
+                logger.debug(f"NPC {self.npc_data['name']}: player in dialogue with {other_npc}, skip greeting")
+                return
+        except Exception:
+            pass
         if "greet" in self._action_cooldowns and self._action_cooldowns["greet"] > 0:
             return
 
@@ -1711,6 +1749,280 @@ class NpcProcess:
             return val.decode("utf-8")
         return val if val is not None else default
 
+    # ── Date System ───────────────────────────────
+
+    # ── Date timing ──
+    DATE_DURATION_MINUTES: int = 90         # game-minutes per date phase
+    DATE_COOLDOWN_ACCEPT: int = 120         # game-minutes cooldown after accept
+    DATE_COOLDOWN_REJECT: int = 60          # game-minutes cooldown after reject
+    # 5 real minutes in game-minutes: 5 * 60 * multiplier / 60 = 5 * multiplier
+    HOME_INVITE_REAL_MINUTES: int = 5
+    @property
+    def home_invite_game_minutes(self) -> int:
+        return self.HOME_INVITE_REAL_MINUTES * settings.game_speed_multiplier
+
+    DATE_ACTIVITIES = {
+        # Every date activity must at least cover decay (hunger:-1.5/h thirst:-2.0/h energy:-1.0/h social:-0.8/h)
+        "吃饭": {"scene": "scene_restaurant", "rates": {"hunger": 1.0, "thirst": 0.3, "social": 0.5}},
+        "喝咖啡": {"scene": "scene_coffee_shop", "rates": {"hunger": 0.05, "thirst": 0.7, "energy": 0.3, "social": 0.3}},
+        "散步": {"scene": "scene_park", "rates": {"hunger": 0.03, "thirst": 0.04, "social": 0.6}},
+        "看电影": {"scene": "scene_cinema", "rates": {"hunger": 0.2, "thirst": 0.2, "energy": 0.5, "social": 0.4}},
+        "喝酒": {"scene": "scene_bar", "rates": {"hunger": 0.2, "thirst": 0.5, "social": 0.5}},
+    }
+
+    HOME_ACTIVITIES_RATES = {
+        "一起做饭": {"hunger": 1.2, "thirst": 0.3, "social": 0.6, "intimacy": 0.3},
+        "一起吃饭": {"hunger": 1.5, "thirst": 0.5, "social": 0.5, "intimacy": 0.2},
+        "一起看电视": {"energy": 0.4, "social": 0.5, "intimacy": 0.3},
+        "一起玩游戏": {"social": 0.8, "intimacy": 0.4},
+        "喝茶聊天": {"thirst": 0.6, "social": 0.7, "intimacy": 0.3},
+        "听音乐": {"energy": 0.3, "social": 0.5, "intimacy": 0.5},
+        "按摩": {"energy": 0.6, "social": 0.4, "intimacy": 0.8},
+        "依偎小憩": {"energy": 1.0, "social": 0.6, "intimacy": 1.0},
+        "帮吹头发": {"social": 0.5, "intimacy": 0.6},
+        "靠在肩上": {"energy": 0.3, "social": 0.7, "intimacy": 0.8},
+    }
+
+    async def _handle_date_invite(self, fields: dict, is_pet: bool):
+        """Player invites NPC on a date. NPC decides accept/reject.
+        Decision is probability-based. LLM text generation runs in background
+        so the event loop is never blocked waiting for LM Studio."""
+        player_id = self._decode_field(fields, "player_id", "")
+        activity = self._decode_field(fields, "date_activity", "喝咖啡")
+        date_scene = self._decode_field(fields, "date_scene", "")
+        cfg = self.DATE_ACTIVITIES.get(activity, self.DATE_ACTIVITIES["喝咖啡"])
+        if not date_scene:
+            date_scene = cfg["scene"]
+
+        rel = self.relationship_mgr.get_relation(player_id)
+        rel_type = rel["relationship_type"] if rel else "stranger"
+        fav = rel.get("favorability", 0) if rel else 0
+
+        accept_probs = {"stranger": 0.10, "acquaintance": 0.40, "friend": 0.70,
+                        "best_friend": 0.85, "boyfriend": 0.95, "girlfriend": 0.95, "spouse": 0.99}
+        prob = accept_probs.get(rel_type, 0.10)
+
+        if "date" in self._action_cooldowns or self._in_date or self._in_dialogue_with:
+            # NPC busy — immediate reject, no LLM needed
+            await self.broker.publish("date:invite", {
+                "player_id": player_id, "npc_id": self.npc_id,
+                "npc_name": self.npc_data["name"],
+                "accepted": False, "message": f"{self.npc_data['name']}现在不方便",
+                "phase": "invite",
+            })
+            response = {"content": f"（{self.npc_data['name']}现在不方便）", "favorability_change": 0}
+            await self.broker.publish("dialogue:response", {
+                "npc_id": self.npc_id, "npc_name": self.npc_data["name"],
+                "player_id": player_id, "content": response["content"],
+                "favorability_change": "0", "favorability_before": fav,
+                "favorability_after": fav,
+                "familiarity_after": rel.get("familiarity", 0) if rel else 0,
+                "mood_before": self.mood_mgr.current, "new_mood": self.mood_mgr.current,
+                "relationship_type": rel_type, "game_time": self._game_time_str(),
+                "initiated_by_npc": "true",
+            })
+            return
+
+        if random.random() < prob:
+            # ── ACCEPT: publish state + notify frontend immediately ──
+            self._in_date = True
+            self._date_player_id = player_id
+            self._date_phase = "location"
+            self._date_data = {"scene_id": date_scene, "activity": activity,
+                               "elapsed": 0, "total": self.DATE_DURATION_MINUTES, "tick_rates": cfg["rates"]}
+            self._action_cooldowns["date"] = self.DATE_COOLDOWN_ACCEPT
+            self.dialogue_handler.set_date_context(
+                f"【当前状态：正在约会中 — 上半场 · {activity}】\n"
+                f"地点：{date_scene}，项目：{activity}\n"
+                f"关系：{rel_type}，好感度：{fav}\n"
+                f"约会刚开始"
+            )
+            self._start_travel(date_scene, "", f"和玩家约会·{activity}", "date")
+            await self._publish_state()
+            await self.broker.publish("date:invite", {
+                "player_id": player_id, "npc_id": self.npc_id,
+                "npc_name": self.npc_data["name"],
+                "date_scene": date_scene, "activity": activity,
+                "accepted": True, "message": "（开心地答应了）",
+                "phase": "invite",
+            })
+            # LLM acceptance text → background task (non-blocking)
+            asyncio.create_task(self._bg_date_response(
+                player_id, fav, rel, rel_type, activity, accepted=True))
+            return
+
+        else:
+            # ── REJECT: publish notify immediately, LLM text in background ──
+            self._action_cooldowns["date"] = self.DATE_COOLDOWN_REJECT
+            await self.broker.publish("date:invite", {
+                "player_id": player_id, "npc_id": self.npc_id,
+                "npc_name": self.npc_data["name"],
+                "accepted": False, "message": "",
+                "phase": "invite",
+            })
+            asyncio.create_task(self._bg_date_response(
+                player_id, fav, rel, rel_type, activity, accepted=False))
+            return
+
+    async def _bg_date_response(self, player_id: str, fav: int, rel: dict,
+                                 rel_type: str, activity: str, accepted: bool):
+        """Background task: generate LLM text for date accept/reject and publish dialogue:response."""
+        logger.info(f"BG date response started: npc={self.npc_id} accepted={accepted}")
+        try:
+            if accepted:
+                msg = f"玩家邀请你去{activity}约会，你开心地答应了。用第一人称简短回复（30字内）"
+                system = f"你是{self.npc_data['name']}，{rel_type}。"
+                fav_change = 2
+            else:
+                msg = f"玩家邀请你去{activity}约会，你礼貌地拒绝了。简短回复（20字内）"
+                system = f"你是{self.npc_data['name']}。"
+                fav_change = 0
+
+            result = await self.dialogue_handler._simple_llm_call(
+                system, msg, call_type="greeting")
+            content = result["content"]
+            logger.info(f"BG date response LLM done: npc={self.npc_id} content={content[:50]}")
+            asyncio.create_task(self._request_tts(content))
+
+            # Save to DB and memory
+            player_msg = f"邀请{activity}约会" if accepted else f"邀约被拒：{activity}"
+            self._save_dialogue(player_id, player_msg, content, fav_change, self._game_time_str())
+            self.memory_mgr.add(
+                f"{self._game_time_str()} 玩家{player_msg}，我回应：{content}",
+                self._game_time_str(), "short_term",
+                importance=7, related_entity_id=player_id,
+                related_entity_type="player")
+
+            # Only publish if NPC is not already in a player dialogue
+            if not self._in_dialogue_with:
+                await self.broker.publish("dialogue:response", {
+                    "npc_id": self.npc_id, "npc_name": self.npc_data["name"],
+                    "player_id": player_id, "content": content,
+                    "favorability_change": str(fav_change),
+                    "favorability_before": fav, "favorability_after": fav + fav_change,
+                    "familiarity_after": rel.get("familiarity", 0) if rel else 0,
+                    "mood_before": self.mood_mgr.current, "new_mood": self.mood_mgr.current,
+                    "relationship_type": rel_type, "game_time": self._game_time_str(),
+                    "initiated_by_npc": "true",
+                })
+        except Exception:
+            logger.exception("Background date response failed for %s", self.npc_id)
+
+    async def _handle_date_leave(self):
+        """Player leaves the date."""
+        player_id = self._date_player_id
+        self._end_date()
+        response = await self.dialogue_handler._simple_llm_call(
+            f"你是{self.npc_data['name']}。", "约会突然结束了。简短反应（15字内）", call_type="greeting")
+        await self.broker.publish("dialogue:response", {
+            "npc_id": self.npc_id, "npc_name": self.npc_data["name"],
+            "player_id": player_id, "content": response["content"],
+            "favorability_change": "0", "favorability_before": 0, "favorability_after": 0,
+            "familiarity_after": 0, "mood_before": self.mood_mgr.current,
+            "new_mood": self.mood_mgr.current, "relationship_type": "stranger",
+            "game_time": self._game_time_str(), "initiated_by_npc": "true",
+        })
+
+    async def _finish_date_phase(self):
+        """Date location phase ended. Decide on home invite."""
+        player_id = self._date_player_id
+        rel = self.relationship_mgr.get_relation(player_id)
+        rel_type = rel["relationship_type"] if rel else "stranger"
+
+        # Home invite probability
+        home_probs = {"best_friend": 0.40, "friend": 0.30, "boyfriend": 0.60,
+                      "girlfriend": 0.60, "spouse": 0.80}
+        prob = home_probs.get(rel_type, 0)
+
+        if random.random() < prob and self._home_scene_id:
+            # Send home invite
+            self._date_phase = "awaiting_home"  # prevent re-triggering _finish_date_phase
+            self._home_invite_sent = True
+            self._home_invite_expires = _stdtime.monotonic() + game_minutes_to_real_seconds(self.home_invite_game_minutes)
+            msg = f"约会后你邀请玩家去你家坐坐。简短邀请（20字内）"
+            result = await self.dialogue_handler._simple_llm_call(
+                f"你是{self.npc_data['name']}。", msg, call_type="greeting")
+            await self.broker.publish("date:invite", {
+                "player_id": player_id, "npc_id": self.npc_id,
+                "npc_name": self.npc_data["name"],
+                "accepted": True, "message": result["content"],
+                "phase": "home_invite",
+            })
+        else:
+            # Date ends
+            self._end_date()
+
+    async def _handle_home_accept(self, fields: dict):
+        """Player accepts home invite. Continue date at NPC home."""
+        self._home_invite_sent = False
+        self._date_phase = "home"
+        self._date_data["elapsed"] = 0
+        self._date_data["total"] = 999  # no time limit
+        home_id = self._home_scene_id or self.npc_data.get("current_scene_id", "")
+        self._date_data["scene_id"] = home_id
+
+        rel = self.relationship_mgr.get_relation(self._date_player_id)
+        rel_type = rel["relationship_type"] if rel else "stranger"
+        fav = rel.get("favorability", 0) if rel else 0
+        self.dialogue_handler.set_date_context(
+            f"【当前状态：正在约会中 — 下半场 · NPC家中】\n"
+            f"关系：{rel_type}，好感度：{fav}\n"
+            f"项目：自由互动"
+        )
+        self._start_travel(home_id, "客厅", "在家中约会", "date_home")
+        await self._publish_state()
+
+        msg = "玩家接受了邀请，来到你家。用第一人称欢迎（25字内）"
+        result = await self.dialogue_handler._simple_llm_call(
+            f"你是{self.npc_data['name']}。", msg, call_type="greeting")
+        await self.broker.publish("dialogue:response", {
+            "npc_id": self.npc_id, "npc_name": self.npc_data["name"],
+            "player_id": self._date_player_id, "content": result["content"],
+            "favorability_change": "3", "favorability_before": fav, "favorability_after": fav + 3,
+            "familiarity_after": rel.get("familiarity", 0) if rel else 0,
+            "mood_before": self.mood_mgr.current, "new_mood": self.mood_mgr.current,
+            "relationship_type": rel_type, "game_time": self._game_time_str(),
+            "initiated_by_npc": "true",
+        })
+        if result.get("content"):
+            asyncio.create_task(self._request_tts(result["content"]))
+
+    async def _handle_home_reject(self):
+        """Player rejects/ignores home invite. Date ends."""
+        self._home_invite_sent = False
+        self._end_date()
+
+    async def _expire_home_invite(self):
+        """Home invite timed out."""
+        self._home_invite_sent = False
+        player_id = self._date_player_id
+        self._end_date()
+        # Notify frontend that invite expired
+        await self.broker.publish("date:invite", {
+            "player_id": player_id, "npc_id": self.npc_id,
+            "npc_name": self.npc_data["name"],
+            "accepted": False, "message": "邀请已过期",
+            "phase": "home_invite_expired",
+        })
+
+    def _end_date(self):
+        """End the date, restore NPC autonomy."""
+        if not self._in_date:
+            return
+        date_scene = self._date_data.get("scene_id", "") if self._date_data else ""
+        self._in_date = False
+        self._date_player_id = ""
+        self._date_phase = ""
+        self._date_data = {}
+        self._home_invite_sent = False
+        self.dialogue_handler.clear_date_context()
+        # Return to home scene (NOT date scene — NPC already there)
+        home = self._home_scene_id or self.npc_data.get("home_scene_id", "")
+        cur_scene = self.npc_data.get("current_scene_id", "")
+        if home and cur_scene != home:
+            self._start_travel(home, "", "恢复自主行动", "date_end")
+        logger.info(f"NPC {self.npc_data['name']}: date ended")
+
     async def _handle_dialogue(self, fields: dict):
         """Process a dialogue request. Routes /action commands to action handler."""
         player_id = self._decode_field(fields, "player_id", "")
@@ -1724,6 +2036,9 @@ class NpcProcess:
 
         if not content:
             return
+
+        # Detect pet client requests — use single-channel pet model
+        is_pet = self._decode_field(fields, "source", "") == "pet"
 
         # Load player data from DB for identity-aware prompts
         player_data = None
@@ -1740,14 +2055,35 @@ class NpcProcess:
 
         # Dialogue lock: prevent concurrent handling that could confuse context
         async with self._dialogue_lock:
+            # ── Detect date/leave commands BEFORE setting dialogue state ──
+            # (date commands manage their own dialogue/in_date state)
+            if content == "/date_invite":
+                await self._handle_date_invite(fields, is_pet)
+                return
+            if content in ("/date_leave",):
+                await self._handle_date_leave()
+                return
+            if content == "/date_home_accept":
+                await self._handle_home_accept(fields)
+                return
+            if content == "/date_home_reject":
+                await self._handle_home_reject()
+                return
+
             # Interrupt autonomous activity
             self.brain.set_in_dialogue(True, player_id)
             self._in_dialogue_with = player_id
+            # Notify other NPCs that player is in dialogue
+            try:
+                await self.broker.kv_set(f"state:player:{player_id}:in_dialogue_with", self.npc_id)
+            except Exception:
+                pass
             self._idle_countdown = 600  # Reset 10-minute countdown
             self._auto_action = None
             self._auto_action_remaining = 0
 
             # Detect action commands (/action)
+            self.dialogue_handler._is_pet = is_pet
             action_name, _ = DialogueHandler._parse_action(content)
             if action_name:
                 logger.info(f"NPC {self.npc_data['name']} received action '{action_name}' from {player_name}")
@@ -1791,6 +2127,9 @@ class NpcProcess:
             "new_mood": result.get("new_mood", ""),
             "relationship_type": result.get("relationship_type", "stranger"),
             "game_time": game_time,
+            "audio_url": "",
+            "initiated_by_npc": "",
+            "action_name": action_name if action_name else "",
         })
         logger.info(f"NPC {self.npc_data['name']} response sent: {result['content'][:60]}... fav={result['favorability_change']}")
 
@@ -2005,6 +2344,11 @@ class NpcProcess:
             "is_traveling": self._is_traveling,
             "travel_target": self._travel_target,
             "travel_remaining": round(self._travel_remaining, 1) if self._is_traveling else 0,
+            "in_date": self._in_date,
+            "date_phase": self._date_phase if hasattr(self, "_date_phase") else "",
+            "date_data": self._date_data if hasattr(self, "_date_data") else {},
+            "date_player_id": self._date_player_id if hasattr(self, "_date_player_id") else "",
+            "home_invite_remaining": max(0, int(self._home_invite_expires - _stdtime.monotonic())) if self._home_invite_sent else 0,
         }
         if self.physiology:
             state["physiology"] = {

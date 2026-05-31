@@ -17,7 +17,7 @@ class LMStudioClient:
     """Async HTTP client for OpenAI-compatible APIs (LM Studio, DeepSeek, etc.)."""
 
     def __init__(self, base_url: str = "", model: str = "",
-                 api_key: str = "", timeout: float = 120.0):
+                 api_key: str = "", timeout: float = 0.0):
         self.base_url = base_url or settings.lmstudio_base_url
         self.model = model or settings.lmstudio_model
         self.api_key = api_key
@@ -43,13 +43,11 @@ class LMStudioClient:
         max_tokens: int = 1024,
         stop: list[str] | None = None,
         thinking: bool = False,
-    ) -> str:
-        """Send a chat completion request and return the response text.
-        
-        Model-specific handling:
-        - DeepSeek: respects thinking flag via API parameter
-        - Qwen/LM Studio: thinking models auto-generate reasoning_content,
-          we strip it and only return content (never reasoning)
+    ) -> dict:
+        """Send a chat completion request and return raw content + reasoning.
+
+        Returns {"content": str, "reasoning": str} — raw, no cleaning.
+        All model-specific cleaning is done centrally in gateway._clean_by_model().
         """
         await self._ensure_client()
 
@@ -62,9 +60,9 @@ class LMStudioClient:
         # DeepSeek thinking mode (explicit API flag)
         if thinking and self.api_key:
             payload["thinking"] = {"type": "enabled"}
-        # LM Studio specific
-        if not self.api_key:
-            payload["repeat_penalty"] = 1.15
+        # LM Studio - no repeat_penalty (not supported by all llama.cpp versions)
+        # if not self.api_key:
+        #     payload["repeat_penalty"] = 1.15
         if stop:
             payload["stop"] = stop
 
@@ -72,6 +70,12 @@ class LMStudioClient:
             f"{self.base_url}/v1/chat/completions",
             json=payload,
         )
+        if resp.status_code >= 400:
+            try:
+                err_body = await resp.aread()
+                logger.error("[LMStudio] HTTP %d error body: %s", resp.status_code, err_body.decode()[:500])
+            except Exception:
+                pass
         resp.raise_for_status()
         data = resp.json()
         choice = data.get("choices", [{}])[0]
@@ -80,21 +84,7 @@ class LMStudioClient:
         reasoning = msg.get("reasoning_content", "") or ""
         finish = choice.get("finish_reason", "?")
 
-        # If content is empty but reasoning exists: model spent all tokens thinking
-        if not content and reasoning:
-            logger.warning(
-                "[LMStudio] thinking overflow: reasoning=%d chars, content=empty, "
-                "finish=%s, max_tokens=%d. Increase max_tokens!",
-                len(reasoning), finish, max_tokens,
-            )
-            # Do NOT return reasoning — it's internal thought, not user-facing reply
-            return ""
-
-        # Strip reasoning from saved context: only return clean content
-        if reasoning:
-            logger.debug("[LMStudio] stripped %d chars of reasoning_content", len(reasoning))
-
-        return content
+        return {"content": content, "reasoning": reasoning, "finish_reason": finish}
 
     async def chat_stream(self, messages: list[dict], temperature: float = 0.5):
         """Stream chat completion tokens. Yields text chunks."""

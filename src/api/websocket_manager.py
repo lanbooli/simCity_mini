@@ -21,13 +21,15 @@ class WSManager:
         self.broker = broker
         self._connections: dict[str, list[WebSocket]] = {}  # player_id -> [WS clients]
         self._last_dialogue: dict[str, WebSocket] = {}  # player_id -> WS that sent last dialogue
+        self._client_types: dict[int, str] = {}
         self._listening = False
 
-    async def connect(self, player_id: str, ws: WebSocket):
+    async def connect(self, player_id: str, ws: WebSocket, client_type: str = "web"):
         await ws.accept()
         if player_id not in self._connections:
             self._connections[player_id] = []
         self._connections[player_id].append(ws)
+        self._client_types[id(ws)] = client_type
         if not self._listening:
             self._listening = True
             asyncio.create_task(self._subscribe_channels())
@@ -37,10 +39,12 @@ class WSManager:
         self._last_dialogue[player_id] = ws
 
     def disconnect(self, player_id: str, ws: WebSocket = None):
-        if ws and player_id in self._connections:
-            self._connections[player_id] = [w for w in self._connections[player_id] if w is not ws]
-            if not self._connections[player_id]:
-                del self._connections[player_id]
+        if ws:
+            self._client_types.pop(id(ws), None)
+            if player_id in self._connections:
+                self._connections[player_id] = [w for w in self._connections[player_id] if w is not ws]
+                if not self._connections[player_id]:
+                    del self._connections[player_id]
         elif not ws:
             self._connections.pop(player_id, None)
 
@@ -75,6 +79,9 @@ class WSManager:
             for ws in dead:
                 self.disconnect(pid, ws)
 
+    def is_pet(self, ws):
+        return self._client_types.get(id(ws), "") == "pet"
+
     async def _subscribe_channels(self):
         """Subscribe to Redis channels and fan out to WebSocket clients."""
         # Time updates → broadcast
@@ -92,6 +99,8 @@ class WSManager:
         for nid in _ALL_NPC_IDS():
             await self.broker.subscribe(f"npc:{nid}:state", self._on_npc_state)
 
+        # Date events → specific player
+        await self.broker.subscribe("date:invite", self._on_date_invite)
         # Dialogue responses → specific player
         await self.broker.subscribe("dialogue:response", self._on_dialogue_response)
         # TTS audio chunks → specific player
@@ -114,30 +123,55 @@ class WSManager:
     async def _on_npc_state(self, data: dict):
         await self.broadcast({"type": "npc_state_update", "data": data})
 
+    async def _on_date_invite(self, data: dict):
+        player_id = data.get("player_id", "")
+        await self.send_to_player(player_id, {
+            "type": "date_invite",
+            "data": {
+                "npc_id": data.get("npc_id"),
+                "npc_name": data.get("npc_name"),
+                "scene_id": data.get("date_scene", ""),
+                "activity": data.get("activity", ""),
+                "accepted": data.get("accepted", False),
+                "message": data.get("message", ""),
+                "phase": data.get("phase", "invite"),  # invite | home_invite
+            },
+        })
+
     async def _on_dialogue_response(self, data: dict):
         player_id = data.get("player_id", "")
+        msg = {
+            "type": "dialogue_response",
+            "data": {
+                "npc_id": data.get("npc_id"),
+                "npc_name": data.get("npc_name"),
+                "content": data.get("content"),
+                "favorability_change": data.get("favorability_change"),
+                "favorability_before": data.get("favorability_before"),
+                "favorability_after": data.get("favorability_after"),
+                "familiarity_after": data.get("familiarity_after"),
+                "mood_before": data.get("mood_before"),
+                "new_mood": data.get("new_mood"),
+                "relationship_type": data.get("relationship_type"),
+                "game_time": data.get("game_time"),
+                "audio_url": data.get("audio_url", ""),
+                "initiated_by_npc": data.get("initiated_by_npc", ""),
+                "action_name": data.get("action_name", ""),
+            },
+        }
         if player_id:
-            await self.send_to_player(player_id, {
-                "type": "dialogue_response",
-                "data": {
-                    "npc_id": data.get("npc_id"),
-                    "npc_name": data.get("npc_name"),
-                    "content": data.get("content"),
-                    "favorability_change": data.get("favorability_change"),
-                    "favorability_before": data.get("favorability_before"),
-                    "favorability_after": data.get("favorability_after"),
-                    "familiarity_after": data.get("familiarity_after"),
-                    "mood_before": data.get("mood_before"),
-                    "new_mood": data.get("new_mood"),
-                    "relationship_type": data.get("relationship_type"),
-                    "game_time": data.get("game_time"),
-                    "audio_url": data.get("audio_url", ""),
-                    "initiated_by_npc": data.get("initiated_by_npc", ""),
-                    "action_name": data.get("action_name", ""),
-                },
-            })
+            # Send to ALL connections for this player (web + pet), each client filters by npc_id
+            clients = self._connections.get(player_id, [])
+            dead = []
+            for ws in clients:
+                try:
+                    await ws.send_json(msg)
+                except Exception:
+                    dead.append(ws)
+            for ws in dead:
+                self.disconnect(player_id, ws)
         else:
-            await self.broadcast({"type": "dialogue_response", "data": data})
+            await self.broadcast(msg)
 
     async def _on_tts_chunk(self, data: dict):
         player_id = data.get("player_id", "")
