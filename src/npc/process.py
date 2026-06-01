@@ -901,6 +901,12 @@ class NpcProcess:
         """Called when NPC reaches destination. Updates scene and publishes."""
         self._is_traveling = False
         self._update_scene(self._travel_target, self._travel_room)
+        # Occupy bed on arrival for sleep travel
+        if self._travel_reason == "sleep" and self._home_scene_id:
+            bed = self._find_best_item("sleep", self._home_scene_id)
+            if bed:
+                self._occupy_item(bed["id"])
+                logger.info(f"NPC {self.npc_data['name']}: occupied bed {bed['id']} on arrival")
         logger.info(f"NPC {self.npc_data['name']}: arrived at {self._travel_target}")
         return {
             "scene_id": self._travel_target,
