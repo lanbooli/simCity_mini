@@ -57,8 +57,9 @@ class SystemProcess:
         self.scene_mgr.load_from_db()
         self.event_mgr.load_events()
 
-        # Publish initial state
+        # Publish initial state — both pubsub AND KV (NPCs read from KV)
         await self.broker.publish("system:time", self.time_mgr.state_dict())
+        await self.broker.kv_set("state:game_time", self.time_mgr.state_dict())
         await self.broker.publish("system:weather", self.weather_mgr.state_dict())
 
         # Handle NPC movement requests

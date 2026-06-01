@@ -68,6 +68,37 @@ def get_npc(npc_id: str):
                                 AND r.entity_b_type = 'npc'""", (npc_id,))
         d["relationships"] = [dict(rel) for rel in rels]
 
+        # Pregnancy info
+        preg = fetch_one(conn,
+            "SELECT * FROM pregnancy WHERE mother_id = ? AND status = 'pregnant'",
+            (npc_id,))
+        d["pregnancy"] = dict(preg) if preg else None
+
+        # Children
+        children = fetch_all(conn,
+            "SELECT n.id, n.name, n.gender, n.birth_date FROM relationship r "
+            "JOIN npc n ON r.entity_b_id = n.id "
+            "WHERE r.entity_a_id = ? AND r.entity_a_type = 'npc' "
+            "AND r.relationship_type = 'child' AND r.entity_b_type = 'npc'",
+            (npc_id,))
+        d["children"] = [dict(c) for c in children]
+
+        # Is sleeping?
+        gt = fetch_one(conn, "SELECT value FROM game_state WHERE key = 'game_time'")
+        if gt:
+            import json as _j2
+            gtd = _j2.loads(gt["value"]) if isinstance(gt["value"], str) else gt["value"]
+            gh = gtd.get("hour", 12)
+            age = 25
+            try:
+                bd = d.get("birth_date", "2001-01-01")
+                age = 2026 - int(bd.split("-")[0])
+            except Exception:
+                pass
+            d["sleeping"] = (gh >= 22 or gh < 6) if age >= 3 else (gh >= 20 or gh < 8)
+        else:
+            d["sleeping"] = False
+
         return ApiResponse(data=d)
     finally:
         conn.close()

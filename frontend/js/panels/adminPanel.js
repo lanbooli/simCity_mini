@@ -25,7 +25,7 @@ const AdminPanel = {
     this._visible = !this._visible;
     const el = document.getElementById('adminPanel');
     if (el) el.style.display = this._visible ? 'flex' : 'none';
-    if (this._visible) this._refreshAll();
+    if (this._visible) { this._refreshAll(); this._loadMessages(); }
   },
 
   _render() {
@@ -255,6 +255,26 @@ const AdminPanel = {
             <button onclick="AdminPanel._saveActivity('${npcId}')" class="admin-btn-sm" style="margin-top:4px">保存活动</button>
           </div>
           <div class="admin-card-section">
+            <div class="admin-label">👶 怀孕与子女</div>
+            ${npc.pregnancy ? `
+              <div style="background:#fff3e0;padding:8px;border-radius:4px;margin:4px 0">
+                🤰 <strong>怀孕中</strong><br>
+                父亲: ${npc.pregnancy.father_name || '未知'}<br>
+                受孕日: Day ${npc.pregnancy.conceived_day || 0}<br>
+                预产期: Day ${npc.pregnancy.due_day || 0}
+              </div>
+            ` : '<div style="color:#999;font-size:12px">未怀孕</div>'}
+            ${npc.children && npc.children.length > 0 ? `
+              <div style="margin-top:4px">
+                <strong>子女 (${npc.children.length}):</strong>
+                ${npc.children.map(c => `
+                  <div style="font-size:12px;padding:2px 0">• ${c.name} (${c.gender==='male'?'♂':'♀'}, 生于 ${c.birth_date})</div>
+                `).join('')}
+              </div>
+            ` : ''}
+            ${npc.sleeping ? '<div style="color:#90a4ae;font-size:12px;margin-top:4px">😴 正在睡觉</div>' : ''}
+          </div>
+          <div class="admin-card-section">
             <div class="admin-label">🧠 性格标签</div>
             <input type="text" value="${(npc.personality||[]).join(', ')}" id="adminPersonality-${npcId}"
                    class="admin-input" placeholder="逗号分隔">
@@ -467,9 +487,9 @@ const AdminPanel = {
         return;
       }
       el.innerHTML = memories.map(m => `
-        <div class="admin-memory-item">
+        <div class="admin-memory-item" onclick="this.classList.toggle('expanded')" title="点击查看全文">
           <div class="admin-memory-time">${(m.game_time||'').substring(0,16)} | ${m.memory_type} | ⭐${m.importance}</div>
-          <div>${this._escapeHtml(m.content)}</div>
+          <div class="admin-item-content">${this._escapeHtml(m.content)}</div>
         </div>
       `).join('');
     } catch (e) {
@@ -490,9 +510,9 @@ const AdminPanel = {
         return;
       }
       el.innerHTML = dialogues.map(d => `
-        <div class="admin-dialogue-item">
+        <div class="admin-dialogue-item" onclick="this.classList.toggle('expanded')" title="点击查看全文">
           <div class="admin-dialogue-time">${(d.game_time||'').substring(0,16)} | ${d.speaker_type==='npc'?'🤖NPC':'👤玩家'}</div>
-          <div>${this._escapeHtml(d.content).substring(0,100)}</div>
+          <div class="admin-item-content">${this._escapeHtml(d.content)}</div>
         </div>
       `).join('');
     } catch (e) {
@@ -658,6 +678,52 @@ const AdminPanel = {
   },
 
   // ── Process management ──
+
+  async _loadMessages() {
+    try {
+      const res = await fetch('/api/admin/player/player_001/messages');
+      const json = await res.json();
+      const msgs = json.data || [];
+      const el = document.getElementById('adminMessages');
+      if (!el) return;
+      if (!msgs.length) {
+        el.innerHTML = '<div class="admin-empty" style="font-size:11px">暂无消息</div>';
+        return;
+      }
+      el.innerHTML = msgs.map(m => {
+        const typeMap = {
+          pregnancy_announce: '🤰 怀孕通知',
+          birth_announce: '👶 分娩通知',
+          baby_milestone: '🍼 成长里程碑',
+        };
+        const typeLabel = typeMap[m.msg_type] || m.msg_type;
+        const unread = !m.is_read ? 'admin-msg-unread' : '';
+        return `<div class="admin-msg ${unread}" onclick="AdminPanel._readMsg('${m.id}')">
+          <div class="admin-msg-header">
+            <strong>${m.from_npc_name}</strong>
+            <span class="admin-msg-type">${typeLabel}</span>
+          </div>
+          <div class="admin-msg-body">${m.content}</div>
+          <div class="admin-msg-time">${m.created_at || ''}</div>
+        </div>`;
+      }).join('');
+    } catch (e) {
+      console.error('Admin: failed to load messages', e);
+    }
+  },
+
+  async _readMsg(msgId) {
+    try {
+      await fetch('/api/admin/player/player_001/messages/read', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message_id: msgId }),
+      });
+      this._loadMessages();
+    } catch (e) {
+      console.error('Admin: failed to mark read', e);
+    }
+  },
 
   async _refreshProcesses() {
     const el = document.getElementById('adminProcessList');

@@ -29,7 +29,7 @@ class Crisis(StrEnum):
 
 # Age stage thresholds and stat cap modifiers
 AGE_CONFIG = {
-    AgeStage.INFANT: {"max_age": 3, "stat_cap": 0.6, "can_socialize": False, "decay_mult": 2.0},
+    AgeStage.INFANT: {"max_age": 7, "stat_cap": 0.4, "can_socialize": False, "decay_mult": 0.0},
     AgeStage.CHILD:  {"max_age": 12, "stat_cap": 0.8, "can_socialize": True, "decay_mult": 1.2},
     AgeStage.ADULT:  {"max_age": 60, "stat_cap": 1.0, "can_socialize": True, "decay_mult": 1.0},
     AgeStage.ELDER:  {"max_age": 120, "stat_cap": 0.7, "can_socialize": True, "decay_mult": 1.3},
@@ -104,8 +104,9 @@ class PhysiologyManager:
 
     # ── public API ──────────────────────────────────
 
-    def tick(self, delta_hours: float):
-        """Advance physiology by delta_hours game hours."""
+    def tick(self, delta_hours: float, decay_mult: float = 1.0):
+        """Advance physiology by delta_hours game hours.
+        decay_mult: override decay rate (1.0=normal, 0.1=sleep)."""
         if self.is_dead:
             return
 
@@ -116,7 +117,7 @@ class PhysiologyManager:
         for stat in ("hunger", "thirst", "energy", "social"):
             base = BASE_DECAY[stat]
             pers_mult = self._get_personality_mult(stat)
-            decay = base * age_mult * pers_mult * delta_hours
+            decay = base * age_mult * pers_mult * delta_hours * decay_mult
             current = getattr(self, stat)
             setattr(self, stat, max(0.0, current - decay))
 
@@ -226,6 +227,25 @@ class PhysiologyManager:
 
     def needs_rest(self) -> bool:
         return self.energy < 30.0
+
+
+    # ── Sleep ─────────────────────────────────────
+
+    def is_sleeping(self, game_hour: int, game_minute: int = 0) -> bool:
+        """Check if NPC should be sleeping at this game time."""
+        if self.is_dead:
+            return False
+        if self._age < 3:
+            # Infants: 20:00 ~ 08:00
+            return game_hour >= 20 or game_hour < 8
+        # Everyone else: 22:00 ~ 06:00
+        return game_hour >= 22 or game_hour < 6
+
+    def sleep_tick(self, delta_hours: float):
+        """Recover energy while sleeping."""
+        if self.is_dead:
+            return
+        self.energy = min(100.0, self.energy + 5.0 * delta_hours)
 
     def snapshot(self) -> PhysiologyState:
         return PhysiologyState(

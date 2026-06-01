@@ -58,6 +58,7 @@ CREATE TABLE IF NOT EXISTS npc (
     home_scene_id   TEXT,
     current_mood    TEXT NOT NULL DEFAULT 'neutral',
     current_activity TEXT,
+    current_item_id TEXT NOT NULL DEFAULT '',
     schedule        TEXT NOT NULL DEFAULT '{}',
     attributes      TEXT NOT NULL DEFAULT '{"stamina":5,"speed":5,"strength":5}',
     is_active       INTEGER NOT NULL DEFAULT 1,
@@ -96,6 +97,8 @@ CREATE TABLE IF NOT EXISTS item (
     room_name       TEXT,
     is_interactive  INTEGER NOT NULL DEFAULT 0,
     is_usable       INTEGER NOT NULL DEFAULT 1,
+    function_attrs  TEXT NOT NULL DEFAULT '{}',
+    occupied_by     TEXT NOT NULL DEFAULT '',
     created_at      TEXT NOT NULL DEFAULT (datetime('now')),
     FOREIGN KEY (scene_id) REFERENCES scene(id),
     FOREIGN KEY (owner_npc_id) REFERENCES npc(id)
@@ -275,3 +278,35 @@ CREATE TABLE IF NOT EXISTS social_comment (
     FOREIGN KEY (post_id) REFERENCES social_post(id)
 );
 
+
+-- ============================================================
+-- 怀孕系统
+-- ============================================================
+CREATE TABLE IF NOT EXISTS pregnancy (
+    id              TEXT PRIMARY KEY,
+    mother_id       TEXT NOT NULL,
+    father_id       TEXT NOT NULL,
+    father_name     TEXT NOT NULL,
+    conceived_day   INTEGER NOT NULL DEFAULT 0,
+    due_day         INTEGER NOT NULL DEFAULT 0,
+    status          TEXT NOT NULL DEFAULT 'pregnant' CHECK(status IN ('pregnant','delivered')),
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (mother_id) REFERENCES npc(id)
+);
+CREATE INDEX IF NOT EXISTS idx_pregnancy_mother ON pregnancy(mother_id);
+
+-- ============================================================
+-- 玩家消息 (NPC→玩家重大通知)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS player_messages (
+    id              TEXT PRIMARY KEY,
+    player_id       TEXT NOT NULL,
+    from_npc_id     TEXT NOT NULL,
+    from_npc_name   TEXT NOT NULL,
+    msg_type        TEXT NOT NULL DEFAULT '',
+    content         TEXT NOT NULL,
+    is_read         INTEGER NOT NULL DEFAULT 0,
+    game_time       TEXT NOT NULL DEFAULT '',
+    created_at      TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_player_msg_player ON player_messages(player_id);

@@ -31,7 +31,7 @@ function renderNpcCard(npc) {
       ${avatarHtml}
       <div class="npc-name">${npc.name}</div>
       ${npc.career ? `<div class="npc-career">${npc.career}</div>` : `<div class="npc-role">${npc.role || '访客'}</div>`}
-      <div class="npc-activity">${npc.activity || '闲逛中'}</div>
+      <div class="npc-activity">${npc.is_sleeping ? '😴 ' : ''}${npc.activity || '闲逛中'}</div>
       ${actionIndicator}
     </div>`;
 }

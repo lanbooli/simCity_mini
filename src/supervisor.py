@@ -216,7 +216,17 @@ class Supervisor:
             self._spawn_tts_gateway()
             time.sleep(3)  # Wait for MLX model to load (~3s)
 
-        # 4. Start all NPC processes (skip dead NPCs)
+        # 4. API server — MUST start before NPCs so WebSocket subscribes first
+        time.sleep(1)
+        if self._check_port_available(settings.api_host, settings.api_port):
+            print(f"[api] Starting API server on {settings.api_host}:{settings.api_port}...")
+            self._spawn("api", API_PROCESS)
+            time.sleep(2)  # Wait for API/WebSocket to be ready
+        else:
+            print(f"[api] ERROR: Port {settings.api_port} already in use! Cannot start API.")
+            print(f"  → Kill the process using port {settings.api_port} and try again.")
+
+        # 5. Start all NPC processes (skip dead NPCs)
         dead_npc_ids = self._get_dead_npc_ids()
         if dead_npc_ids:
             try:
@@ -226,6 +236,7 @@ class Supervisor:
                 for did in dead_npc_ids:
                     if _rdb.delete(f"health:npc:{did}"):
                         cleaned += 1
+                    _rdb.delete(f"state:npc:{did}")  # clean stale state
                 if cleaned:
                     print(f"[health] Cleaned {cleaned} stale health keys for dead NPCs")
                 _rdb.close()
@@ -242,18 +253,10 @@ class Supervisor:
                 "env": {"NPC_ID": npc_id},
             })
 
-        # 5. Player process
+        # 6. Player process
         print("[player] Starting player process...")
         self._spawn("player", PROCESSES["player"])
 
-        # 6. API server (check port first)
-        time.sleep(1)
-        if self._check_port_available(settings.api_host, settings.api_port):
-            print(f"[api] Starting API server on {settings.api_host}:{settings.api_port}...")
-            self._spawn("api", API_PROCESS)
-        else:
-            print(f"[api] ERROR: Port {settings.api_port} already in use! Cannot start API.")
-            print(f"  → Kill the process using port {settings.api_port} and try again.")
 
         print(f"\nAll processes started. {len(self.children)} processes running.")
         print(f"Frontend: http://localhost:{settings.api_port}")

@@ -336,7 +336,7 @@
 /* Memory / Dialogue lists */
 .admin-memory-list,
 .admin-dialogue-list {
-  max-height: 200px;
+  max-height: 400px;
   overflow-y: auto;
   margin-top: 4px;
 }
@@ -358,3 +358,38 @@
   color: #666;
   margin-bottom: 2px;
 }
+
+
+/* ── Expandable content items ── */
+.admin-item-content {
+  word-break: break-word;
+  white-space: pre-wrap;
+  max-height: 2.8em;
+  overflow: hidden;
+  cursor: pointer;
+  transition: max-height 0.3s;
+}
+.admin-memory-item.expanded .admin-item-content,
+.admin-dialogue-item.expanded .admin-item-content {
+  max-height: none;
+  overflow: visible;
+}
+.admin-memory-item,
+.admin-dialogue-item {
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.admin-memory-item:hover,
+.admin-dialogue-item:hover {
+  background: #1a1a2e;
+}
+
+/* ── Player Messages ─────────────────────── */
+.admin-messages { max-height: 200px; overflow-y: auto; }
+.admin-msg { padding: 6px 8px; margin: 4px 0; border-radius: 6px; background: #f5f5f5; cursor: pointer; }
+.admin-msg:hover { background: #e8e8e8; }
+.admin-msg-unread { background: #e3f2fd; border-left: 3px solid #2196f3; }
+.admin-msg-header { display: flex; justify-content: space-between; align-items: center; font-size: 12px; }
+.admin-msg-type { font-size: 10px; color: #999; }
+.admin-msg-body { font-size: 12px; margin: 3px 0; color: #333; }
+.admin-msg-time { font-size: 10px; color: #bbb; }

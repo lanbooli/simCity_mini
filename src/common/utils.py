@@ -56,6 +56,14 @@ def game_time_to_minutes(day: int, hour: int, minute: int) -> int:
     return day * 24 * 60 + hour * 60 + minute
 
 
+def game_time_to_dict(game_state: dict | str) -> dict:
+    """Parse game_state value (JSON string or dict) into a game time dict.
+    Returns {"day": int, "hour": int, "minute": int}."""
+    import json
+    d = json.loads(game_state) if isinstance(game_state, str) else game_state
+    return {"day": d.get("day", 0), "hour": d.get("hour", 12), "minute": d.get("minute", 0)}
+
+
 def minutes_to_game_time(total_minutes: int) -> tuple[int, int, int]:
     """Convert total minutes to (day, hour, minute)."""
     day = total_minutes // (24 * 60)

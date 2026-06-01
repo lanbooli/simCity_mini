@@ -147,6 +147,7 @@ const GALDialogue = {
             _seq: ++this._msgSeq,
           }));
           this._renderTextbox(this._allMsgs);
+    this._resetIdle();
         }
       } catch (e) {
         console.error('Failed to load dialogue history:', e);
@@ -259,7 +260,8 @@ const GALDialogue = {
     }
 
     // NPC status below portrait
-    const activity = state.current_activity || npc.current_activity || '闲逛中';
+    const isSleeping = state.is_sleeping || false;
+    const activity = (isSleeping ? '😴 ' : '') + (state.current_activity || npc.current_activity || '闲逛中');
     const aa = state.auto_action;
     const autoText = aa ? ` · ${aa.icon || ''} ${aa.display_text || aa.action_name}` : '';
     const moodIcon = moodEmoji[mood] || '😐';
@@ -542,6 +544,7 @@ const GALDialogue = {
       this._allMsgs.push({ ...m });
     }
     this._renderTextbox(this._allMsgs);
+    this._resetIdle();
     const lastNpc = [...this._allMsgs].reverse().find(m => m.speakerType === 'npc');
     if (lastNpc && (lastNpc.favorabilityAfter !== undefined || lastNpc.familiarityAfter !== undefined)) {
       this._updateRelBarFromMsg(lastNpc);

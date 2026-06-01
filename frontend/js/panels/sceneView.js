@@ -112,7 +112,8 @@ const SceneView = {
       const selectedRoom = this._selectedRoom;
       const npcs = detail.npcs.map(n => {
         const state = npcState[n.id] || {};
-        const activity = state.current_activity || n.current_activity || '闲逛中';
+        const isSleeping = state.is_sleeping || false;
+        const activity = (isSleeping ? '😴 ' : '') + (state.current_activity || n.current_activity || '闲逛中');
         const roomName = state.current_room || '';
         return {
           id: n.id,
@@ -124,6 +125,7 @@ const SceneView = {
           roomName: roomName,
           role: n.role === 'worker' ? '工作人员' : (n.role === 'resident' ? '住户' : '访客'),
           avatar: n.avatar || '',
+          is_sleeping: state.is_sleeping || false,
           in_dialogue: state.in_dialogue || false,
           bubble: bubbles[n.id] || null,
           auto_action: state.auto_action || null,

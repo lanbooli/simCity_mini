@@ -157,3 +157,30 @@ class Message(BaseModel):
     source: dict = {}
     target: dict = {}
     payload: dict = {}
+
+
+# ── Pregnancy ─────────────────────────────────────────
+
+class Pregnancy(BaseModel):
+    id: str = Field(default_factory=gen_id)
+    mother_id: str
+    father_id: str
+    father_name: str
+    conceived_day: int = 0
+    due_day: int = 0
+    status: str = "pregnant"  # pregnant | delivered
+    created_at: str = ""
+
+
+# ── Player Message ────────────────────────────────────
+
+class PlayerMessage(BaseModel):
+    id: str = Field(default_factory=gen_id)
+    player_id: str
+    from_npc_id: str
+    from_npc_name: str
+    msg_type: str = ""  # pregnancy_announce | birth_announce | baby_milestone
+    content: str
+    is_read: int = 0
+    game_time: str = ""
+    created_at: str = ""

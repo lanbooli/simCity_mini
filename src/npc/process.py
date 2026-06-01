@@ -25,7 +25,7 @@ from src.npc.movement import MovementManager, generate_default_schedule
 from src.npc.memory import MemoryManager
 from src.npc.relationship import RelationshipManager
 from src.npc.brain import Brain
-from src.npc.dialogue import DialogueHandler, CAREER_WORKPLACE, CAREER_GREETINGS, parse_stage_and_dialogue
+from src.npc.dialogue import DialogueHandler, InteractionContext, InteractionContext, CAREER_WORKPLACE, CAREER_GREETINGS, parse_stage_and_dialogue
 import hashlib
 from src.npc.perception import Perception
 from src.npc.social_feed import SocialFeedManager
@@ -110,8 +110,29 @@ class NpcProcess:
             import json
             attrs = json.loads(attrs)
         self._has_bike = attrs.get("has_bike", False)
+        # Load current game time for initial state (must be BEFORE sleep catch-up)
+        try:
+            gt = await self.broker.kv_get("state:game_time")
+            if gt:
+                self._game_time = gt
+        except Exception:
+            pass
+
         self._load_npc_data()
         await self._catch_up_schedule()
+
+        # If it's sleeping time at startup, move NPC home + occupy bed
+        if self.physiology and self.physiology.is_sleeping(self._game_time.get("hour", 12)):
+            if self._home_scene_id:
+                bed = self._find_best_item("sleep", self._home_scene_id)
+                bed_name = bed["name"] if bed else "床"
+                room = bed.get("room_name") or "卧室" if bed else "卧室"
+                activity = f"在{room}的{bed_name}上睡觉"
+                self.npc_data["current_activity"] = activity
+                self._update_scene(self._home_scene_id, room)
+                if bed:
+                    self._occupy_item(bed["id"])
+                logger.info(f"NPC {self.npc_data['name']}: sleep catch-up, on {bed_name} in {room}")
 
         logger.info(f"NPC {self.npc_data['name']} loaded. "
                      f"Scene: {self._scene_name}")
@@ -155,6 +176,9 @@ class NpcProcess:
             self.npc_data, self.memory_mgr,
             self.relationship_mgr, self.mood_mgr,
         )
+
+        # Restore persisted state (travel, date, home invite, sex_stage, etc.)
+        await self._restore_state()
 
         self._intimacy_engine = IntimacyEngine(
             npc_data=self.npc_data,
@@ -303,7 +327,7 @@ class NpcProcess:
             self.physiology.tick(1.0)
             if self.physiology.is_dead:
                 logger.info(f"NPC {self.npc_data['name']} has died: {self.physiology.death_cause}")
-                self._persist_death()
+                await self._persist_death()
                 self._running = False
                 await self._publish_state()
                 return
@@ -328,7 +352,7 @@ class NpcProcess:
             self.physiology.elder_death_check()
             if self.physiology.is_dead:
                 logger.info(f"NPC {self.npc_data['name']} has died: {self.physiology.death_cause}")
-                self._persist_death()
+                await self._persist_death()
                 self._running = False
                 await self._publish_state()
                 return
@@ -339,7 +363,34 @@ class NpcProcess:
                 asyncio.create_task(self._expire_home_invite())
 
         # Run autonomous decision (every ~15 game minutes)
-        if data.get("minute", 0) % 15 == 0 and not self._in_dialogue_with and not self._is_traveling and not self._in_date:
+        # Sleep state detection and handling
+        _is_sleeping = _is_sleeping_early
+        _was_sleeping = getattr(self, "_prev_sleeping", False)
+        if _is_sleeping:
+            self.physiology.sleep_tick(0.25)
+        if _is_sleeping != _was_sleeping:
+            self._prev_sleeping = _is_sleeping
+            if _is_sleeping and self._home_scene_id:
+                current = self.npc_data.get("current_scene_id", "")
+                bed = self._find_best_item("sleep", self._home_scene_id)
+                bed_name = bed["name"] if bed else "床"
+                room = bed.get("room_name") or "卧室" if bed else "卧室"
+                if current != self._home_scene_id and not self._in_dialogue_with and not self._is_traveling and not self._in_date:
+                    activity = f"在{room}的{bed_name}上睡觉"
+                    self.npc_data["current_activity"] = activity
+                    logger.info(f"NPC {self.npc_data['name']}: going home to sleep on {bed_name}, room={room}")
+                    self._start_travel(self._home_scene_id, room, activity, "sleep")
+                elif current == self._home_scene_id and not self._in_date:
+                    activity = f"在{room}的{bed_name}上睡觉"
+                    self.npc_data["current_activity"] = activity
+                    self._update_scene(self._home_scene_id, room)
+                    if bed:
+                        self._occupy_item(bed["id"])
+            if not _is_sleeping and _was_sleeping:
+                self._release_item()
+                logger.info(f"NPC {self.npc_data['name']}: woke up at hour={data.get('hour', 12)}")
+            await self._publish_state()
+        if data.get("minute", 0) % 15 == 0 and not self._in_dialogue_with and not self._is_traveling and not self._in_date and not _is_sleeping:
             await self._autonomous_cycle(data)
 
     async def _on_weather_update(self, data: dict):
@@ -2296,7 +2347,7 @@ class NpcProcess:
         elif new_scene_id != old_scene:
             logger.info(f"NPC {self.npc_data['name']}: moved from {old_scene} to {new_scene_id}")
 
-    def _persist_death(self):
+    async def _persist_death(self):
         """Save NPC death state to database."""
         try:
             conn = get_connection()
@@ -2309,6 +2360,51 @@ class NpcProcess:
         except Exception as e:
             logger.error(f"NPC {self.npc_data['name']}: failed to persist death: {e}")
 
+
+    async def _restore_state(self):
+        """Restore NPC state from Redis KV after restart."""
+        import json as _rj
+        try:
+            raw = await self.broker.kv_get(f"state:npc:{self.npc_id}")
+            if not raw:
+                return
+            if isinstance(raw, str):
+                state = _rj.loads(raw)
+            else:
+                state = dict(raw) if raw else {}
+            if not state:
+                return
+            if state.get("is_traveling"):
+                self._is_traveling = True
+                self._travel_target = state.get("travel_target", "")
+                self._travel_remaining = float(state.get("travel_remaining", 0))
+                self._travel_room = state.get("travel_room", "")
+                self._travel_activity = state.get("travel_activity", "")
+                self._travel_reason = state.get("travel_reason", "")
+            if state.get("in_date"):
+                self._in_date = True
+                self._date_phase = state.get("date_phase", "")
+                self._date_data = state.get("date_data", {})
+                self._date_player_id = state.get("date_player_id", "")
+                if self.dialogue_handler:
+                    self.dialogue_handler._in_date = True
+            expires = float(state.get("home_invite_expires", 0))
+            if expires > _stdtime.monotonic():
+                self._home_invite_sent = True
+                self._home_invite_expires = expires
+            dc = state.get("date_context", "")
+            if dc and self.dialogue_handler:
+                self.dialogue_handler._date_context = dc
+            ictx = state.get("interaction_ctx", {})
+            if ictx and self.dialogue_handler:
+                self.dialogue_handler.interaction_ctx = InteractionContext.from_dict(ictx)
+            self._llm_consecutive_failures = int(state.get("llm_consecutive_failures", 0))
+            sex_stage = state.get("sex_stage", {})
+            if sex_stage and isinstance(sex_stage, dict) and self.dialogue_handler:
+                self.dialogue_handler._sex_stage.update(sex_stage)
+        except Exception as e:
+            logger.warning(f"NPC {self.npc_data['name']}: failed to restore state: {e}")
+
     async def _publish_state(self):
         """Publish NPC state to Redis."""
         current_scene_id = self.npc_data.get("current_scene_id", "")
@@ -2318,6 +2414,9 @@ class NpcProcess:
         room_name = self.npc_data.get("current_room", "") or ""
         if not room_name and self._scene_type == "home" and activity:
             room_name = self._extract_room_from_activity(activity)
+
+        # Sleep state
+        _sleeping = self.physiology.is_sleeping(self._game_time.get("hour", 12)) if self.physiology else False
 
         state = {
             "npc_id": self.npc_id,
@@ -2339,6 +2438,7 @@ class NpcProcess:
             "home_scene_id": self._home_scene_id,
             "home_scene_name": self._home_scene_name,
             "in_dialogue": bool(self._in_dialogue_with),
+            "is_sleeping": _sleeping,
             "is_dead": self.physiology.is_dead if self.physiology else False,
             "death_cause": self.physiology.death_cause if self.physiology else "",
             "is_traveling": self._is_traveling,
@@ -2349,6 +2449,15 @@ class NpcProcess:
             "date_data": self._date_data if hasattr(self, "_date_data") else {},
             "date_player_id": self._date_player_id if hasattr(self, "_date_player_id") else "",
             "home_invite_remaining": max(0, int(self._home_invite_expires - _stdtime.monotonic())) if self._home_invite_sent else 0,
+            "current_item_id": self.npc_data.get("current_item_id", ""),
+            "sex_stage": self.dialogue_handler._sex_stage if self.dialogue_handler else {},
+            "travel_room": self._travel_room,
+            "travel_activity": self._travel_activity,
+            "travel_reason": self._travel_reason,
+            "home_invite_expires": self._home_invite_expires if self._home_invite_sent else 0,
+            "llm_consecutive_failures": self._llm_consecutive_failures,
+            "date_context": self.dialogue_handler._date_context if self.dialogue_handler else "",
+            "interaction_ctx": self.dialogue_handler.interaction_ctx.to_dict() if self.dialogue_handler else {},
         }
         if self.physiology:
             state["physiology"] = {
@@ -2398,6 +2507,12 @@ class NpcProcess:
     async def shutdown(self):
         logger.info(f"NPC {self.npc_data.get('name', self.npc_id)} shutting down...")
         self._running = False
+        self._release_item()
+        if self._in_dialogue_with:
+            try:
+                await self.broker.kv_delete(f"state:player:{self._in_dialogue_with}:in_dialogue_with")
+            except Exception:
+                pass
         for task in self._tasks:
             task.cancel()
         if self._tasks:

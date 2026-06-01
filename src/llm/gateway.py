@@ -722,7 +722,7 @@ class Gateway:
 def main():
     cfg = GatewayConfig(
         max_concurrent=settings.llm_gateway_max_concurrent,
-        player_workers=2,
+        player_workers=1,
         npc_workers=max(settings.llm_gateway_max_concurrent - 2, 1),
         redis_url=settings.redis_url,
         llm_provider=settings.llm_provider,

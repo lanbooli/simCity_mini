@@ -155,6 +155,7 @@ async def resurrect_npc(npc_id: str, request: dict = None):
             new_birth = f"{birth_year:04d}-01-01"
             execute(conn,
                 "UPDATE npc SET is_dead = 0, is_active = 1, death_cause = '', "
+                "current_activity = '', current_item_id = '', "
                 "birth_date = ?, updated_at = datetime('now') WHERE id = ?",
                 (new_birth, npc_id))
             conn.commit()
@@ -172,7 +173,8 @@ async def resurrect_npc(npc_id: str, request: dict = None):
             return {"status": "ok", "data": {"npc_id": npc_id, "name": row["name"], "resurrected": True, "new_age": new_age}}
         else:
             execute(conn,
-                "UPDATE npc SET is_dead = 0, is_active = 1, death_cause = '', updated_at = datetime('now') WHERE id = ?",
+                "UPDATE npc SET is_dead = 0, is_active = 1, death_cause = '', "
+                "current_activity = '', current_item_id = '', updated_at = datetime('now') WHERE id = ?",
                 (npc_id,))
             conn.commit()
             logger.info(f"Admin resurrected NPC {row['name']} ({npc_id})")
@@ -730,3 +732,55 @@ async def switch_provider(request: dict):
     except Exception as e:
         logger.error("Provider switch failed: %s", e)
         raise HTTPException(500, str(e))
+
+
+# ── Player Messages ──────────────────────────────
+
+@router.get("/player/{player_id}/messages")
+def get_player_messages(player_id: str, unread_only: bool = False):
+    """Get messages sent to a player by NPCs."""
+    conn = get_connection()
+    try:
+        if unread_only:
+            rows = fetch_all(conn,
+                "SELECT * FROM player_messages WHERE player_id = ? AND is_read = 0 "
+                "ORDER BY created_at DESC LIMIT 50",
+                (player_id,))
+        else:
+            rows = fetch_all(conn,
+                "SELECT * FROM player_messages WHERE player_id = ? "
+                "ORDER BY created_at DESC LIMIT 50",
+                (player_id,))
+        return ApiResponse(data=[dict(r) for r in rows])
+    finally:
+        conn.close()
+
+
+@router.post("/player/{player_id}/messages/read")
+def mark_messages_read(player_id: str, request: dict = None):
+    """Mark all messages as read, or specific message by id."""
+    conn = get_connection()
+    try:
+        msg_id = (request or {}).get("message_id", "")
+        if msg_id:
+            execute(conn, "UPDATE player_messages SET is_read = 1 WHERE id = ?", (msg_id,))
+        else:
+            execute(conn, "UPDATE player_messages SET is_read = 1 WHERE player_id = ?",
+                    (player_id,))
+        conn.commit()
+        return ApiResponse(data={"status": "ok"})
+    finally:
+        conn.close()
+
+
+@router.get("/player/{player_id}/messages/unread_count")
+def get_unread_count(player_id: str):
+    """Get count of unread player messages."""
+    conn = get_connection()
+    try:
+        row = fetch_one(conn,
+            "SELECT COUNT(*) as cnt FROM player_messages WHERE player_id = ? AND is_read = 0",
+            (player_id,))
+        return ApiResponse(data={"count": row["cnt"] if row else 0})
+    finally:
+        conn.close()

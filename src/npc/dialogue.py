@@ -18,6 +18,7 @@ from src.llm.gateway_client import (
 )
 from src.llm.prompts import (
     NPC_DIALOGUE_SYSTEM, NPC_DIALOGUE_USER, NPC_ACTION_SYSTEM,
+    NPC_SEX_INTERACTION,
     NPC_SOCIAL_OPEN, NPC_SOCIAL_REPLY, NPC_GREETING,
     NPC_INNER_THOUGHT, NPC_ACTION_NARRATIVE,
     NPC_CONFESSION_SYSTEM, NPC_PROPOSAL_SYSTEM, NPC_BREAKUP_SYSTEM,
@@ -215,12 +216,33 @@ class InteractionContext:
         return "\n".join(parts).strip()
 
 
+    
+    def to_dict(self) -> dict:
+        """Serialize for persistence across restarts."""
+        return {
+            "recent_actions": list(self.recent_actions),
+            "physical_states": dict(self.physical_states),
+        }
+    
+    @classmethod
+    def from_dict(cls, data: dict):
+        """Deserialize from persisted state."""
+        ctx = cls()
+        if data:
+            for action in data.get("recent_actions", []):
+                ctx.recent_actions.append(action)
+            ctx.physical_states = dict(data.get("physical_states", {}))
+        return ctx
+
+
 class DialogueHandler:
     def __init__(self, npc_data: dict, memory_mgr, relationship_mgr, mood_mgr):
         self.npc = npc_data
         self._is_pet = False  # set by process.py for pet client requests
         self._in_date = False       # True during date (both phases)
         self._date_context = ""     # injected into LLM prompts
+        self._sex_stage = {"count": 0, "intensity": 0, "last_action": "",
+                           "last_player_action": "", "last_npc_response": ""}
         self.memory_mgr = memory_mgr
         self.relationship_mgr = relationship_mgr
         self.mood_mgr = mood_mgr
@@ -233,6 +255,7 @@ class DialogueHandler:
         self, player_name: str, player_id: str, player_message: str,
         scene_name: str = "", game_time: str = "", player_context: str = "",
         player_data: dict = None,
+        action_extra: str = "",
     ) -> dict:
         """
         Generate NPC response to player dialogue.
@@ -466,6 +489,8 @@ class DialogueHandler:
         """Clear date context after date ends."""
         self._in_date = False
         self._date_context = ""
+        self._sex_stage = {"count": 0, "intensity": 0, "last_action": "",
+                           "last_player_action": "", "last_npc_response": ""}
 
     def _get_goals_text(self) -> list:
         from src.common.database import get_connection, fetch_all
@@ -544,12 +569,26 @@ class DialogueHandler:
         Supports: /动作名, /动作名 额外内容
         Returns ("", content) if not an action command.
         """
-        if content.startswith("/"):
-            parts = content[1:].split(None, 1)
+        # Detect /H sex interaction prefix
+        is_sex = False
+        raw = content
+        if content.startswith("/[H]") or content.startswith("/[h]"):
+            is_sex = True
+            raw = content[4:]
+        elif content.startswith("/H") or content.startswith("/h"):
+            is_sex = True
+            raw = content[2:]
+
+        if is_sex:
+            return ("__sex__", raw.strip())
+
+        # Regular /command handling
+        if raw.startswith("/"):
+            parts = raw[1:].split(None, 1)
             action_name = parts[0].strip()
             extra = parts[1].strip() if len(parts) > 1 else ""
-            # Treat any /command as an action — LLM handles custom actions
             return action_name, extra
+
         return "", content
 
     async def respond_to_action(
@@ -557,6 +596,7 @@ class DialogueHandler:
         scene_name: str = "", game_time: str = "", scene_type: str = "indoor",
         player_attrs: dict | None = None, npc_attrs: dict | None = None,
         player_data: dict = None,
+        action_extra: str = "",
     ) -> dict:
         """
         Generate NPC reaction to a player action (non-dialogue).
@@ -569,6 +609,13 @@ class DialogueHandler:
         # Check if it's a regular or physical action
         action = ACTION_RULES.get(action_name)
         physical_action = PHYSICAL_ACTIONS.get(action_name) if not action else None
+
+        # Sex interaction handler
+        if action_name == "__sex__":
+            return await self._handle_sex_interaction(
+                player_name, player_id, action_extra or action_name, scene_name, game_time,
+                player_data=player_data,
+            )
 
         if not action and not physical_action:
             # Custom action — generate via LLM with action prompt
@@ -662,7 +709,11 @@ class DialogueHandler:
                 timeout=300,
             )
             response = raw_response
-            logger.info(f"NPC {self.npc['name']} action response: {response[:80]}...")
+            if not response or not response.strip():
+                response = self._fallback_action_response(action_name)
+                logger.warning(f"NPC {self.npc['name']} action response was empty, using fallback")
+            else:
+                logger.info(f"NPC {self.npc['name']} action response: {response[:80]}...")
         except Exception as e:
             logger.warning(f"NPC {self.npc['name']} action LLM call failed: {type(e).__name__}: {e}")
             response = self._fallback_action_response(action_name)
@@ -724,6 +775,191 @@ class DialogueHandler:
             f"（微微一愣，然后露出礼貌的微笑）你好？",
         ]
         return f"{random.choice(fallbacks)} [[FAVORABILITY: 0]]"
+
+
+    # ── Sex Interaction ─────────────────────────
+
+    _SEX_KEYWORDS = ["嘿咻", "做爱", "射精", "性交", "上床", "交配", "啪啪",
+                      "房事", "行房", "内射", "插入", "抽送", "高潮", "爱抚",
+                      "亲吻", "拥抱", "抚摸", "揉捏", "舔舐", "含住"]
+
+    async def _handle_sex_interaction(
+        self, player_name: str, player_id: str, action_name: str,
+        scene_name: str = "", game_time: str = "",
+        player_data: dict = None,
+        action_extra: str = "",
+    ) -> dict:
+        """Handle /H sex interaction with specialized LLM prompt."""
+        mood_before = self.mood_mgr.current
+        rel = self.relationship_mgr.get_or_create_relation(player_id, "player")
+        fav_before = rel.get("favorability", 0)
+
+        action_desc = action_name
+        self._sex_stage["count"] += 1
+        self._sex_stage["last_action"] = action_desc
+
+        stage_desc = f"第{self._sex_stage['count']}次亲密互动"
+
+        age = self._calc_age()
+        p_gender, p_age, p_appearance, p_personality, p_role = self._format_player_info(player_data)
+
+        # Get previous interaction for continuity
+        last_player = self._sex_stage.get("last_player_action", "")
+        last_npc = self._sex_stage.get("last_npc_response", "")
+        # Truncate last NPC response to keep prompt size reasonable
+        if len(last_npc) > 300:
+            last_npc = last_npc[:300] + "..."
+
+        system_template = Template(NPC_SEX_INTERACTION)
+        system_msg = system_template.render(
+            npc=self.npc,
+            age=age,
+            personality_list=", ".join(json.loads(self.npc.get("personality", "[]"))),
+            personality_desc=self._personality_desc,
+            scene_name=scene_name,
+            player_name=player_name,
+            player_gender=p_gender,
+            player_age=p_age,
+            player_appearance=p_appearance,
+            player_personality=p_personality,
+            player_role=p_role,
+            rel=rel,
+            action_name=action_desc,
+            interaction_stage=stage_desc,
+            last_player_action=last_player,
+            last_npc_response=last_npc,
+        )
+
+        user_msg = f"{player_name}对你做了：{action_desc}"
+
+        gateway = get_gateway_client()
+        try:
+            logger.info(f"NPC {self.npc['name']} sex interaction: '{action_desc}' from {player_name}")
+            max_tok, temp = get_llm_params("player_action")
+            raw_response = await gateway.submit(
+                priority=PRIORITY_MAP["player_action"],
+                call_type="player_action",
+                messages=[
+                    {"role": "system", "content": system_msg},
+                    {"role": "user", "content": user_msg},
+                ],
+                temperature=0.9,
+                max_tokens=max_tok,
+                timeout=300,
+            )
+            response = raw_response
+            # Check for empty response (model spent all tokens on thinking)
+            if not response or not response.strip():
+                response = f"（{self.npc['name']}微微颤抖，脸颊泛红，似乎说不出话来）嗯... [[FAVORABILITY: +2]]"
+                logger.warning(f"NPC {self.npc['name']} sex response was empty, using fallback")
+            # Save for continuity in next /H call
+            self._sex_stage["last_player_action"] = action_desc
+            self._sex_stage["last_npc_response"] = response[:500]
+            logger.info(f"NPC {self.npc['name']} sex response: {response[:80]}...")
+        except Exception as e:
+            logger.warning(f"NPC {self.npc['name']} sex LLM failed: {type(e).__name__}: {e}")
+            response = f"（{self.npc['name']}微微颤抖，脸颊泛红，似乎说不出话来）嗯... [[FAVORABILITY: +2]]"
+
+        # Parse favorability
+        fav_change = self._parse_favorability(response)
+        fav_change = self._apply_favorability_rules(rel, fav_change)
+        self.relationship_mgr.update_interaction(player_id, fav_change)
+        updated_rel = self.relationship_mgr.get_or_create_relation(player_id, "player")
+        self.mood_mgr.affect(fav_change)
+
+        # Check for [ORGASM] → pregnancy roll
+        has_orgasm = "[ORGASM]" in response
+        if has_orgasm:
+            response = response.replace("[ORGASM]", "")
+            self._sex_stage["intensity"] = min(100, self._sex_stage["intensity"] + 20)
+            # Pregnancy probability roll
+            prob = min(0.30, 0.05 + 0.03 * self._sex_stage["count"])
+            import random as _rand
+            if _rand.random() < prob and self.npc.get("gender") == "female"                     and not self._is_pregnant(player_id):
+                asyncio.create_task(self._start_pregnancy(player_id, player_name, game_time))
+        else:
+            self._sex_stage["intensity"] = min(100, self._sex_stage["intensity"] + 5)
+
+        # Memory
+        self.memory_mgr.add(
+            content=f"与{player_name}亲密互动: {action_desc[:80]}",
+            game_time=game_time,
+            importance=max(5, abs(fav_change) + 3),
+            emotion="joy" if fav_change > 0 else "",
+            related_entity_id=player_id,
+            related_entity_type="player",
+        )
+
+        return {
+            "content": response.strip(),
+            "favorability_change": fav_change,
+            "favorability_before": fav_before,
+            "favorability_after": updated_rel.get("favorability", fav_before + fav_change),
+            "familiarity_after": rel.get("familiarity", 0),
+            "mood_before": mood_before,
+            "new_mood": self.mood_mgr.current,
+            "relationship_type": rel.get("relationship_type", "stranger"),
+        }
+
+    def _is_pregnant(self, father_id: str) -> bool:
+        """Check if this NPC is currently pregnant by the given father."""
+        try:
+            from src.common.database import get_connection, fetch_one
+            conn = get_connection()
+            row = fetch_one(conn,
+                "SELECT id FROM pregnancy WHERE mother_id = ? AND status = 'pregnant'",
+                (self.npc["id"],))
+            conn.close()
+            return row is not None
+        except Exception:
+            return False
+
+    async def _start_pregnancy(self, player_id: str, player_name: str, game_time: str):
+        """Start a pregnancy for this NPC."""
+        from src.common.database import get_connection, execute
+        from src.common.models import gen_id
+
+        current_day = 1
+        try:
+            import re
+            match = re.search(r'Day\s*(\d+)', game_time)
+            if match:
+                current_day = int(match.group(1))
+        except Exception:
+            pass
+
+        pregnancy_id = gen_id()
+        conn = get_connection()
+        try:
+            execute(conn, """INSERT INTO pregnancy(id, mother_id, father_id, father_name,
+                         conceived_day, due_day, status)
+                         VALUES(?, ?, ?, ?, ?, ?, 'pregnant')""",
+                    (pregnancy_id, self.npc["id"], player_id, player_name,
+                     current_day, current_day + 280))
+            conn.commit()
+        finally:
+            conn.close()
+
+        self._send_player_message(player_id, "pregnancy_announce",
+            f"我怀孕了，孩子是你的。真不敢相信...我要当妈妈了。")
+
+        logger.info(f"NPC {self.npc['name']} pregnant! father={player_name} day={current_day}")
+
+    def _send_player_message(self, player_id: str, msg_type: str, content: str):
+        """Send a message from this NPC to a player."""
+        try:
+            from src.common.database import get_connection, execute
+            from src.common.models import gen_id
+            conn = get_connection()
+            execute(conn, """INSERT INTO player_messages(id, player_id, from_npc_id,
+                         from_npc_name, msg_type, content, game_time)
+                         VALUES(?, ?, ?, ?, ?, ?, ?)""",
+                    (gen_id(), player_id, self.npc["id"], self.npc["name"],
+                     msg_type, content, ""))
+            conn.commit()
+            conn.close()
+        except Exception as e:
+            logger.warning(f"Failed to send player message: {e}")
 
     async def _generate_custom_action_response(
         self, player_name: str, player_id: str, action_name: str,
@@ -826,6 +1062,7 @@ class DialogueHandler:
         self, target_name: str, target_id: str, action_name: str,
         action_desc: str, scene_name: str = "", game_time: str = "",
         player_data: dict = None,
+        action_extra: str = "",
     ) -> dict:
         """Generate narrative for NPC-initiated action toward a target."""
         rel = self.relationship_mgr.get_or_create_relation(target_id, "player")
@@ -1177,5 +1414,3 @@ def parse_stage_and_dialogue(text: str) -> list[dict]:
     # If no markers found at all, return whole text as dialogue
     if not segments and text.strip():
         segments.append({"text": text.strip(), "type": "dialogue"})
-    
-    return segments
