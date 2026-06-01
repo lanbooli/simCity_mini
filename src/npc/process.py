@@ -322,9 +322,12 @@ class NpcProcess:
                 if self._date_data["elapsed"] >= total:
                     asyncio.create_task(self._finish_date_phase())
 
-        # Physiology tick (every game hour)
-        if data.get("minute") == 0 and self.physiology:
-            self.physiology.tick(1.0)
+        # Early sleep check (reused below for autonomous cycle)
+        _is_sleeping_early = self.physiology.is_sleeping(data.get("hour", 12)) if self.physiology else False
+
+        # Physiology tick (every game hour), skip during dialogue
+        if data.get("minute") == 0 and self.physiology and not self._in_dialogue_with:
+            self.physiology.tick(1.0, decay_mult=0.1 if _is_sleeping_early else 1.0)
             if self.physiology.is_dead:
                 logger.info(f"NPC {self.npc_data['name']} has died: {self.physiology.death_cause}")
                 await self._persist_death()
