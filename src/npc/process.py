@@ -121,19 +121,6 @@ class NpcProcess:
         self._load_npc_data()
         await self._catch_up_schedule()
 
-        # If it's sleeping time at startup, move NPC home + occupy bed
-        if self.physiology and self.physiology.is_sleeping(self._game_time.get("hour", 12)):
-            if self._home_scene_id:
-                bed = self._find_best_item("sleep", self._home_scene_id)
-                bed_name = bed["name"] if bed else "床"
-                room = bed.get("room_name") or "卧室" if bed else "卧室"
-                activity = f"在{room}的{bed_name}上睡觉"
-                self.npc_data["current_activity"] = activity
-                self._update_scene(self._home_scene_id, room)
-                if bed:
-                    self._occupy_item(bed["id"])
-                logger.info(f"NPC {self.npc_data['name']}: sleep catch-up, on {bed_name} in {room}")
-
         logger.info(f"NPC {self.npc_data['name']} loaded. "
                      f"Scene: {self._scene_name}")
 
@@ -179,6 +166,25 @@ class NpcProcess:
 
         # Restore persisted state (travel, date, home invite, sex_stage, etc.)
         await self._restore_state()
+        # If it's sleeping time at startup, move NPC home + occupy bed
+        # (runs AFTER state restore so travel state doesn't override sleep)
+        if self.physiology and self.physiology.is_sleeping(self._game_time.get("hour", 12)):
+            if self._home_scene_id:
+                # Release any stale travel state
+                self._is_traveling = False
+                self._travel_remaining = 0.0
+                bed = self._find_best_item("sleep", self._home_scene_id)
+                bed_name = bed["name"] if bed else "床"
+                room = bed.get("room_name") or "卧室" if bed else "卧室"
+                activity = f"在{room}的{bed_name}上睡觉"
+                self.npc_data["current_activity"] = activity
+                self._update_scene(self._home_scene_id, room)
+                if bed:
+                    self._occupy_item(bed["id"])
+                logger.info(f"NPC {self.npc_data['name']}: sleep catch-up, on {bed_name} in {room}")
+                self._prev_sleeping = True
+
+
 
         self._intimacy_engine = IntimacyEngine(
             npc_data=self.npc_data,
@@ -952,6 +958,85 @@ class NpcProcess:
         if name:
             return {"name": name}
         return {"name": self._get_scene_name(scene_id)}
+
+
+    def _find_best_item(self, need: str, scene_id: str = None) -> dict | None:
+        """Find the best unoccupied item for a given need (sleep/eat/drink/wash).
+        
+        For private needs (sleep/wash), only considers items owned by this NPC
+        or shared (no owner). Returns the item with the highest recovery value."""
+        private_funcs = ("sleep", "wash")
+        import json as _json
+        sid = scene_id or self.npc_data.get("current_scene_id", "")
+        if not sid:
+            return None
+        conn = get_connection()
+        try:
+            if need in private_funcs:
+                rows = fetch_all(conn,
+                    "SELECT * FROM item WHERE scene_id = ? AND function IS NOT NULL "
+                    "AND function LIKE ? AND occupied_by = '' AND (owner_npc_id = '' OR owner_npc_id = ?)",
+                    (sid, f'%{need}%', self.npc_id))
+            else:
+                rows = fetch_all(conn,
+                    "SELECT * FROM item WHERE scene_id = ? AND function IS NOT NULL "
+                    "AND function LIKE ? AND occupied_by = ''",
+                    (sid, f'%{need}%'))
+            best = None
+            best_val = -1.0
+            for row in rows:
+                attrs_str = row.get("function_attrs", "{}") or "{}"
+                try:
+                    attrs = _json.loads(attrs_str) if isinstance(attrs_str, str) else attrs_str
+                except Exception:
+                    attrs = {}
+                # Handle nested recovery structure: {"sleep": {"energy_recovery": 5.0}}
+                # Also handles: {"eat": {"hunger_recovery": 30}}, {"drink": {"thirst_recovery": 40}}
+                raw = attrs.get(need, attrs.get("recovery"))
+                if isinstance(raw, dict):
+                    # Try need-specific key first, fall back to generic recovery
+                    need_keys = {"sleep": "energy_recovery", "eat": "hunger_recovery",
+                                 "drink": "thirst_recovery", "wash": "cleanliness_recovery",
+                                 "rest": "energy_recovery", "cook": "hunger_recovery"}
+                    key = need_keys.get(need, "recovery")
+                    val = float(raw.get(key, raw.get("recovery", 0.0)) or 0.0)
+                else:
+                    val = float(raw or 0.0)
+                if val > best_val:
+                    best_val = val
+                    best = dict(row)
+            return best
+        finally:
+            conn.close()
+
+    def _occupy_item(self, item_id: str):
+        """Mark an item as occupied by this NPC."""
+        conn = get_connection()
+        try:
+            execute(conn,
+                "UPDATE item SET occupied_by = ? WHERE id = ?",
+                (self.npc_id, item_id))
+            conn.commit()
+            self.npc_data["current_item_id"] = item_id
+            logger.debug(f"NPC {self.npc_data['name']}: occupied item {item_id}")
+        finally:
+            conn.close()
+
+    def _release_item(self):
+        """Release the currently occupied item (if any)."""
+        item_id = self.npc_data.get("current_item_id", "")
+        if not item_id:
+            return
+        conn = get_connection()
+        try:
+            execute(conn,
+                "UPDATE item SET occupied_by = '' WHERE id = ? AND occupied_by = ?",
+                (item_id, self.npc_id))
+            conn.commit()
+            logger.debug(f"NPC {self.npc_data['name']}: released item {item_id}")
+        finally:
+            conn.close()
+        self.npc_data["current_item_id"] = ""
 
     def _get_scene_room_name(self, scene_id: str, func: str) -> str | None:
         """Extract room name from scene JSON matching a function keyword."""
@@ -2270,6 +2355,7 @@ class NpcProcess:
         return ""
 
     @staticmethod
+    @staticmethod
     def _rel_type_cn(rel_type: str) -> str:
         mapping = {
             "parent": "父母", "sibling": "兄弟姐妹", "child": "子女",
@@ -2358,6 +2444,7 @@ class NpcProcess:
 
     async def _persist_death(self):
         """Save NPC death state to database."""
+        self._release_item()
         try:
             conn = get_connection()
             execute(conn,
