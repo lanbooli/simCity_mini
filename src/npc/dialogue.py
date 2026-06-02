@@ -328,7 +328,7 @@ class DialogueHandler:
                 messages=messages,
                 temperature=temp,
                 max_tokens=max_tok,
-                timeout=300,  # thinking model takes 60-180s
+                timeout=600,  # thinking model can take 5-15 min
             )
             response = raw_response
             logger.info(f"NPC {self.npc['name']} LLM response: {response[:80]}...")
@@ -706,7 +706,7 @@ class DialogueHandler:
                 messages=messages,
                 temperature=temp,
                 max_tokens=max_tok,
-                timeout=300,
+                timeout=600,
             )
             response = raw_response
             if not response or not response.strip():
@@ -845,7 +845,7 @@ class DialogueHandler:
                 ],
                 temperature=0.9,
                 max_tokens=max_tok,
-                timeout=300,
+                timeout=600,
             )
             response = raw_response
             # Check for empty response (model spent all tokens on thinking)
@@ -1316,7 +1316,7 @@ class DialogueHandler:
             default_tok, default_temp = get_llm_params(call_type) if call_type else (1024, 0.7)
             tok = max_tokens if max_tokens > 0 else default_tok
             import os as _dial_os
-            _dial_timeout = float(_dial_os.environ.get("LLM_TIMEOUT_SECONDS", "300"))
+            _dial_timeout = float(_dial_os.environ.get("LLM_TIMEOUT_SECONDS", "600"))
             llm_timeout = _dial_timeout if settings.llm_provider == 'lmstudio' else min(180, _dial_timeout)
             raw_response = await gateway.submit(
                 priority=PRIORITY_MAP.get(call_type, Priority.MEDIUM),

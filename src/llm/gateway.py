@@ -116,14 +116,14 @@ class GatewayConfig:
     lmstudio_base_url: str = ""
     lmstudio_main_model: str = ""
     lmstudio_social_model: str = ""
-    request_timeout: float = 300.0
+    request_timeout: float = 600.0
     circuit_threshold: int = 10
     circuit_recovery: float = 30.0
     retry_max: int = 3
     retry_base_delay: float = 1.0
     poll_batch_size: int = 10
     poll_block_ms: int = 2000
-    stale_timeout: float = 300.0
+    stale_timeout: float = 600.0
 
 
 def _decode_fields(fields: dict) -> dict:
@@ -328,7 +328,7 @@ class GatewayWorker:
                 base_url=self._main_base_url,
                 model=self._main_model,
                 api_key=self._api_key,
-                timeout=self.cfg.request_timeout or float(os.environ.get("LLM_TIMEOUT_SECONDS", "300")),
+                timeout=self.cfg.request_timeout or float(os.environ.get("LLM_TIMEOUT_SECONDS", "600")),
             )
         return self._main_client
 
@@ -339,7 +339,7 @@ class GatewayWorker:
                 base_url=self._social_base_url,
                 model=self._social_model,
                 api_key=self._api_key,
-                timeout=self.cfg.request_timeout or float(os.environ.get("LLM_TIMEOUT_SECONDS", "300")),
+                timeout=self.cfg.request_timeout or float(os.environ.get("LLM_TIMEOUT_SECONDS", "600")),
             )
         return self._social_client
 
@@ -432,14 +432,26 @@ class GatewayWorker:
         last_error = ""
         logger.debug("[GW %s] payload: model=%s max_tokens=%d thinking=%s msg_count=%d", 
                      req_id[:8], actual_model, max_tokens, use_thinking, len(messages))
-        for attempt in range(self.cfg.retry_max):
+        _thinking_boost_applied = False
+        _effective_max_tokens = max_tokens
+        for attempt in range(self.cfg.retry_max + 1):  # +1 for thinking-boost retry
             try:
                 raw = await client.chat(
                     messages, temperature=temperature,
-                    max_tokens=max_tokens, stop=stop,
+                    max_tokens=_effective_max_tokens, stop=stop,
                     thinking=use_thinking,
                 )
                 clean_text = _clean_by_model(actual_model, raw)
+                # ── Auto-retry on thinking overflow with 4x max_tokens ──
+                reasoning = raw.get("reasoning", "") or ""
+                if not clean_text and reasoning and not _thinking_boost_applied:
+                    _thinking_boost_applied = True
+                    _effective_max_tokens = max(max_tokens * 4, 32768)
+                    logger.warning(
+                        "[GW %s] thinking overflow detected, retrying with "
+                        "max_tokens=%d (was %d)",
+                        req_id[:8], _effective_max_tokens, max_tokens)
+                    continue  # retry immediately with boosted tokens
                 self.cb.record_success()
                 return {
                     "request_id": req_id,
